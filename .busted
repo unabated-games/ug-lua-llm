@@ -1,0 +1,4 @@
+return {
+  default = { verbose = true, ["exclude-pattern"] = "integration" },
+  integration = { verbose = true, output = "gtest", ROOT = { "spec/integration/" } },
+}

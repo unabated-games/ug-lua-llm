@@ -1,0 +1,15 @@
+- **Start here**
+  - [Overview](/)
+  - [Getting started](/docs/getting-started.md)
+- **Guides**
+  - [Local AI](/docs/guides/local-ai.md)
+  - [Providers](/docs/guides/providers.md)
+  - [AI coding agents](/docs/agents.md)
+- **Reference**
+  - [Client API](/docs/reference/client.md)
+  - [Errors and retries](/docs/reference/errors.md)
+  - [Examples](/examples/README.md)
+- **For LLMs**
+  - [Quick reference](/llms.md)
+  - [Full reference](/llms-full.md)
+- [GitHub](https://github.com/unabated-games/ug-lua-llm)

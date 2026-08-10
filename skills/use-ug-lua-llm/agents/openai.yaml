@@ -1,0 +1,4 @@
+interface:
+  display_name: "Use ug-lua-llm"
+  short_description: "Build Lua applications with cloud or local LLMs"
+  default_prompt: "Use $use-ug-lua-llm to add an LLM-powered feature to this Lua project."

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="ug-lua-llm — one Lua client for cloud and local language models.">
+    <meta name="theme-color" content="#111827">
+    <title>ug-lua-llm — LLMs for Lua</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css">
+    <link rel="stylesheet" href="assets/theme.css">
+  </head>
+  <body>
+    <div id="app">Loading ug-lua-llm documentation…</div>
+    <script>
+      const sourcePreview = /\/site\/(?:index\.html)?$/.test(window.location.pathname);
+      window.$docsify = {
+        name: '<span class="brand-mark">λ</span> ug-lua-llm',
+        repo: 'unabated-games/ug-lua-llm',
+        basePath: sourcePreview ? '../' : './',
+        homepage: 'docs/index.md',
+        loadSidebar: sourcePreview ? 'site/_sidebar.md' : true,
+        relativePath: true,
+        alias: {
+          '/getting-started': '/docs/getting-started.md',
+          '/guides/(.*)': '/docs/guides/$1.md',
+          '/reference/(.*)': '/docs/reference/$1.md',
+          '/agents': '/docs/agents.md'
+        },
+        auto2top: true,
+        maxLevel: 3,
+        subMaxLevel: 2,
+        search: { placeholder: 'Search the docs', noData: 'No results' },
+        copyCode: { buttonText: 'Copy', errorText: 'Error', successText: 'Copied' }
+      };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/plugins/search.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/docsify-copy-code@3/dist/docsify-copy-code.min.js"></script>
+  </body>
+</html>

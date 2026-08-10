@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        lua-version:
+          - "5.1"
+          - "5.2"
+          - "5.3"
+          - "5.4"
+          # LuaJIT skipped: LuaRocks manifest exceeds 65536 constants limit
+          # - "luajit-2.1"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: leafo/gh-actions-lua@v13
+        with:
+          luaVersion: ${{ matrix.lua-version }}
+
+      - uses: leafo/gh-actions-luarocks@v6
+
+      - name: Install dependencies
+        run: |
+          luarocks install luasocket
+          luarocks install dkjson
+          luarocks install http
+          luarocks install busted
+
+      - name: Run tests
+        run: |
+          busted --verbose --exclude-pattern="integration"
+          UG_LUA_LLM_JSON_BACKEND=dkjson busted --exclude-pattern="integration"
+        env:
+          LUA_PATH: "./?.lua;./?/init.lua;${{ env.LUA_PATH }};;"
+
+      - name: Run end-to-end transport tests
+        run: sh scripts/run_e2e.sh
+        env:
+          LUA_PATH: "./?.lua;./?/init.lua;${{ env.LUA_PATH }};;"
+
+      - name: Validate package
+        if: matrix.lua-version == '5.4'
+        run: |
+          luarocks make ug-lua-llm-0.1.0-1.rockspec
+          luarocks pack ug-lua-llm 0.1.0-1
+
+      - name: Check version consistency
+        if: matrix.lua-version == '5.4'
+        run: lua scripts/check_version.lua ug-lua-llm-0.1.0-1.rockspec
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: leafo/gh-actions-lua@v13
+        with:
+          luaVersion: "5.4"
+
+      - uses: leafo/gh-actions-luarocks@v6
+
+      - name: Install luacheck
+        run: luarocks install luacheck
+
+      - name: Run luacheck
+        run: luacheck ug-lua-llm/ spec/ scripts/
+
+  clean-install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: leafo/gh-actions-lua@v13
+        with:
+          luaVersion: "5.4"
+
+      - uses: leafo/gh-actions-luarocks@v6
+
+      - name: Install rock into an isolated tree
+        run: luarocks make --tree "$RUNNER_TEMP/ug-lua-llm-rocks" ug-lua-llm-0.1.0-1.rockspec
+
+      - name: Verify installed modules and doctor
+        run: |
+          eval "$(luarocks path --tree "$RUNNER_TEMP/ug-lua-llm-rocks")"
+          cd "$RUNNER_TEMP"
+          lua -e 'local llm = require("ug-lua-llm"); assert(llm._VERSION == "0.1.0")'
+          UG_LUA_LLM_JSON_BACKEND=dkjson lua -e 'assert(require("ug-lua-llm.utils.json").backend == "dkjson")'
+          lua -e 'local report = require("ug-lua-llm.doctor").run(); assert(report.ok)'
+
+  macos-install:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Homebrew LuaRocks
+        run: brew install lua@5.4 luarocks
+
+      - name: Install and verify the rock
+        run: |
+          export PATH="$(brew --prefix lua@5.4)/bin:$PATH"
+          lua -v
+          luarocks --lua-version 5.4 --lua-dir "$(brew --prefix lua@5.4)" \
+            make --tree "$RUNNER_TEMP/ug-lua-llm-rocks" ug-lua-llm-0.1.0-1.rockspec
+          eval "$(luarocks --lua-version 5.4 --lua-dir "$(brew --prefix lua@5.4)" \
+            path --tree "$RUNNER_TEMP/ug-lua-llm-rocks")"
+          lua -e 'local llm = require("ug-lua-llm"); assert(llm._VERSION == "0.1.0")'
+          UG_LUA_LLM_LUAROCKS_COMMAND="luarocks --lua-version 5.4 --lua-dir $(brew --prefix lua@5.4)" \
+            lua scripts/doctor.lua
