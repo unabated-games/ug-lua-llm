@@ -1,0 +1,82 @@
+# ug-lua-llm agent reference
+
+ug-lua-llm is a dependency-light Lua 5.1–5.4 client for OpenAI, Claude, Gemini,
+Grok, Groq, OpenRouter, Ollama, DeepSeek, Mistral, and arbitrary
+OpenAI-compatible Chat Completions endpoints.
+
+## Install and import
+
+    git clone https://github.com/unabated-games/ug-lua-llm.git
+    cd ug-lua-llm
+    luarocks make ug-lua-llm-0.1.0-1.rockspec
+
+    local llm = require "ug-lua-llm"
+    local client = llm.new("openai", {
+      api_key = os.getenv("OPENAI_API_KEY"),
+      model = "gpt-5.6-terra",
+    })
+
+Supported provider names: openai, claude, gemini, grok, groq, openrouter,
+ollama, deepseek, mistral, openai-compatible.
+
+For custom endpoints prefer:
+
+    local client = llm.openai_compatible({
+      base_url = "http://localhost:8000/v1",
+      model = "my-model",
+      api_key = os.getenv("LLM_API_KEY"), -- optional
+      headers = {},                       -- optional
+      capabilities = { streaming = true, tools = false, models = true },
+    })
+
+For local Ollama use `llm.new("ollama", { model = "llama3.2" })`; its default
+base URL is http://localhost:11434/v1 and authentication is optional.
+
+## Core contract
+
+Messages are `{ role = "system"|"user"|"assistant"|"tool", content = ... }`.
+Every operation returns `result, err, details`. On failure result is nil, err is
+human-readable, and optional details describes kind, provider, status, code,
+retryability, safe headers, and sanitized body.
+
+Normalized responses expose these fields where available: text, tool_calls,
+usage, model, finish_reason, provider, raw. Do not parse provider wire formats
+when a normalized field exists. Use raw only for provider-specific data.
+
+Client methods:
+
+- chat(messages, options)
+- complete(prompt, options)
+- chat_with_tools(messages, tools, options)
+- stream_chat(messages, callback, options)
+- stream_complete(prompt, callback, options)
+- stream_chat_with_tools(messages, tools, callback, options)
+- list_models(options)
+- capabilities()
+- response(input, options): OpenAI Responses only
+- interaction(input, options): Gemini Interactions only
+
+Streaming callbacks receive `(delta, full)`. Prefer `delta.content` or
+`delta.text`. Deltas may also carry tool_calls, finish_reason, provider, raw.
+
+Tool definitions use `{ name, description, parameters = <JSON Schema> }`.
+Parse calls with `llm.Tool.parse_tool_calls(response)`. Each parsed call has id,
+name, decoded arguments when valid, type, and raw. Use `llm.ToolRegistry` for
+handler registration and automatic execution.
+
+Embeddings: `llm.Embeddings.new(provider, config):embed(input, options)` supports
+OpenAI, Gemini, Mistral, Ollama, and DeepSeek.
+
+## Safe implementation rules
+
+- Check errors; do not assume a response exists.
+- Do not log keys, Authorization headers, payload secrets, or `.env` contents.
+- Inspect `client:capabilities()` before selecting optional features.
+- Treat custom endpoint capabilities as declarations, then run
+  `LLM_BASE_URL=... LLM_MODEL=... lua scripts/conformance.lua` to verify them.
+- Pass model explicitly when reproducibility matters.
+- Keep `/v1` in common Ollama and OpenAI-compatible base URLs.
+- Use `lua scripts/doctor.lua` when installed rocks cannot be required.
+
+See docs/index.md for human documentation and examples/README.md for runnable
+programs.

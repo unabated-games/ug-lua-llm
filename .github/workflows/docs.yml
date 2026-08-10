@@ -1,0 +1,51 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build static documentation
+        run: sh scripts/build_site.sh
+      - name: Check required pages
+        run: |
+          test -f _site/index.html
+          test -f _site/docs/getting-started.md
+          test -f _site/llms.txt
+          test -f _site/llms-full.txt
+          test -f _site/llms.md
+          test -f _site/docs/guides/_sidebar.md
+          test -f _site/skills/use-ug-lua-llm/SKILL.md
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build static documentation
+        run: sh scripts/build_site.sh
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
