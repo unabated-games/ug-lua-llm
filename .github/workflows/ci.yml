@@ -55,15 +55,20 @@ jobs:
         env:
           LUA_PATH: "./?.lua;./?/init.lua;${{ env.LUA_PATH }};;"
 
+      # The rockspec is discovered rather than pinned so a version bump needs
+      # no workflow edit; check_version.lua asserts that everything carrying
+      # the version agrees, including source.tag.
       - name: Validate package
         if: matrix.lua-version == '5.4'
         run: |
-          luarocks make ug-lua-llm-0.1.0-1.rockspec
-          luarocks pack ug-lua-llm 0.1.0-1
+          rockspec=$(ls ./*.rockspec | head -n 1)
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' "$rockspec")
+          luarocks make "$rockspec"
+          luarocks pack ug-lua-llm "$version"
 
       - name: Check version consistency
         if: matrix.lua-version == '5.4'
-        run: lua scripts/check_version.lua ug-lua-llm-0.1.0-1.rockspec
+        run: lua scripts/check_version.lua
 
   lint:
     runs-on: ubuntu-latest
@@ -94,13 +99,15 @@ jobs:
       - uses: leafo/gh-actions-luarocks@v6
 
       - name: Install rock into an isolated tree
-        run: luarocks make --tree "$RUNNER_TEMP/ug-lua-llm-rocks" ug-lua-llm-0.1.0-1.rockspec
+        run: |
+          rockspec=$(ls ./*.rockspec | head -n 1)
+          luarocks make --tree "$RUNNER_TEMP/ug-lua-llm-rocks" "$rockspec"
 
       - name: Verify installed modules and doctor
         run: |
           eval "$(luarocks path --tree "$RUNNER_TEMP/ug-lua-llm-rocks")"
           cd "$RUNNER_TEMP"
-          lua -e 'local llm = require("ug-lua-llm"); assert(llm._VERSION == "0.1.0")'
+          lua -e 'local llm = require("ug-lua-llm"); assert(type(llm._VERSION) == "string")'
           UG_LUA_LLM_JSON_BACKEND=dkjson lua -e 'assert(require("ug-lua-llm.utils.json").backend == "dkjson")'
           lua -e 'local report = require("ug-lua-llm.doctor").run(); assert(report.ok)'
 
@@ -116,10 +123,11 @@ jobs:
         run: |
           export PATH="$(brew --prefix lua@5.4)/bin:$PATH"
           lua -v
+          rockspec=$(ls ./*.rockspec | head -n 1)
           luarocks --lua-version 5.4 --lua-dir "$(brew --prefix lua@5.4)" \
-            make --tree "$RUNNER_TEMP/ug-lua-llm-rocks" ug-lua-llm-0.1.0-1.rockspec
+            make --tree "$RUNNER_TEMP/ug-lua-llm-rocks" "$rockspec"
           eval "$(luarocks --lua-version 5.4 --lua-dir "$(brew --prefix lua@5.4)" \
             path --tree "$RUNNER_TEMP/ug-lua-llm-rocks")"
-          lua -e 'local llm = require("ug-lua-llm"); assert(llm._VERSION == "0.1.0")'
+          lua -e 'local llm = require("ug-lua-llm"); assert(type(llm._VERSION) == "string")'
           UG_LUA_LLM_LUAROCKS_COMMAND="luarocks --lua-version 5.4 --lua-dir $(brew --prefix lua@5.4)" \
             lua scripts/doctor.lua
