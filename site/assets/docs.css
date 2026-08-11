@@ -1,0 +1,617 @@
+/* Dark documentation theme. Layered over docsify's vue.css, which supplies
+   the layout primitives; everything below restates colour and type.
+   Requires assets/base.css for tokens and the site header. */
+
+:root {
+  --theme-color: var(--tan);
+  --sidebar-w: 292px;
+}
+
+html,
+body {
+  background: var(--night);
+}
+
+body {
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 16px;
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The header is fixed, so the two docsify panes start beneath it. */
+.masthead {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+}
+
+/* Full bleed here so the wordmark lines up over the sidebar rather than
+   floating in from a centred content measure. */
+.masthead .shell {
+  max-width: none;
+  padding-inline: 20px 28px;
+}
+
+.sidebar,
+.content {
+  top: var(--masthead-h);
+}
+
+/* ------------------------------------------------------------- sidebar */
+
+.sidebar {
+  width: var(--sidebar-w);
+  padding: 28px 0 40px;
+  background: var(--deep);
+  border-right: 1px solid var(--line);
+  /* The search plugin injects itself above the title; order restores the
+     intended reading sequence without depending on injection order. */
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar > h1 {
+  order: 1;
+}
+
+.sidebar .search {
+  order: 2;
+}
+
+.sidebar .sidebar-nav {
+  order: 3;
+}
+
+.sidebar > h1 {
+  margin: 0 0 18px;
+  padding: 0 20px;
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sidebar > h1 a,
+.sidebar > h1 .app-name-link {
+  color: var(--dim);
+  text-decoration: none;
+}
+
+.sidebar > h1 a:hover {
+  color: var(--tan);
+}
+
+.sidebar-nav > ul > li {
+  margin-bottom: 20px;
+}
+
+.sidebar-nav strong,
+.sidebar li > strong {
+  display: block;
+  margin: 0 20px 7px;
+  color: var(--cream);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.sidebar ul li a {
+  display: block;
+  margin: 1px 10px;
+  padding: 6px 10px;
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 0.91rem;
+  line-height: 1.4;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.sidebar ul li a:hover {
+  background: rgba(195, 138, 93, 0.1);
+  color: var(--cream);
+}
+
+.sidebar ul li.active > a,
+.sidebar ul li a.active {
+  background: rgba(195, 138, 93, 0.15);
+  color: var(--tan-lift);
+  font-weight: 600;
+  border-right: 0;
+}
+
+.sidebar ul li ul {
+  padding-left: 12px;
+}
+
+.sidebar ul li ul a {
+  font-size: 0.83rem;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+/* -------------------------------------------------------------- search */
+
+.search {
+  margin: 0 0 16px;
+  padding: 0 20px 18px !important;
+  border-bottom: 1px solid var(--line) !important;
+}
+
+.search input {
+  width: 100%;
+  padding: 9px 12px !important;
+  background: var(--night);
+  border: 1px solid var(--line) !important;
+  border-radius: 9px;
+  color: var(--cream);
+  font-family: var(--sans);
+  font-size: 0.88rem;
+}
+
+.search input::placeholder {
+  color: var(--dim);
+}
+
+.search input:focus {
+  border-color: var(--tan) !important;
+  outline: none;
+}
+
+.search .clear-button {
+  filter: invert(1) brightness(0.8);
+}
+
+.search h2,
+.search p {
+  color: var(--muted);
+}
+
+.search .matching-post {
+  border-bottom: 1px solid var(--line);
+}
+
+.search .matching-post h2 {
+  color: var(--cream);
+  font-family: var(--sans);
+  font-size: 0.92rem;
+}
+
+.search .matching-post em {
+  color: var(--tan-lift);
+  font-style: normal;
+}
+
+/* ------------------------------------------------------------- content */
+
+.markdown-section {
+  max-width: 860px;
+  padding: 44px 32px 96px;
+}
+
+.markdown-section h1,
+.markdown-section h2,
+.markdown-section h3,
+.markdown-section h4 {
+  color: var(--cream);
+  font-family: var(--display);
+  letter-spacing: -0.026em;
+}
+
+.markdown-section h1 {
+  margin: 0 0 1.4rem;
+  font-size: clamp(2.1rem, 5vw, 3rem);
+  font-weight: 600;
+  line-height: 1.06;
+}
+
+.markdown-section h2 {
+  margin: 3rem 0 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line);
+  font-size: clamp(1.5rem, 3vw, 1.85rem);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.markdown-section h3 {
+  margin: 2.2rem 0 0.7rem;
+  font-size: 1.24rem;
+  font-weight: 600;
+}
+
+.markdown-section h4 {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.markdown-section p,
+.markdown-section li {
+  color: var(--text);
+  line-height: 1.72;
+}
+
+.markdown-section > p:first-of-type {
+  color: var(--muted);
+  font-size: 1.09rem;
+}
+
+.markdown-section a {
+  color: var(--tan-lift);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: rgba(224, 169, 122, 0.4);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.markdown-section a:hover {
+  color: var(--cream);
+  text-decoration-color: var(--cream);
+}
+
+/* Docsify wraps every heading in an .anchor link, which would otherwise pick
+   up the link colour and underline above. */
+.markdown-section h1 a,
+.markdown-section h2 a,
+.markdown-section h3 a,
+.markdown-section h4 a,
+.markdown-section .anchor,
+.markdown-section .anchor span {
+  color: inherit;
+  font-weight: inherit;
+  text-decoration: none;
+}
+
+.markdown-section .anchor:hover span {
+  color: var(--tan-lift);
+}
+
+.markdown-section strong {
+  color: var(--cream);
+  font-weight: 600;
+}
+
+.markdown-section hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 2.5rem 0;
+}
+
+/* ----------------------------------------------------------------- code */
+
+.markdown-section code {
+  background: rgba(195, 138, 93, 0.11);
+  border-radius: 4px;
+  color: var(--tan-lift);
+  font-family: var(--mono);
+  font-size: 0.85em;
+  padding: 0.12em 0.36em;
+}
+
+.markdown-section pre,
+.markdown-section pre[data-lang] {
+  margin: 1.4rem 0 1.6rem;
+  padding: 1.1rem 1.2rem !important;
+  background: var(--deep) !important;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  line-height: 1.7;
+}
+
+.markdown-section pre::after {
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  opacity: 0.8;
+}
+
+.markdown-section pre > code,
+.markdown-section pre code[class*="lang-"] {
+  background: transparent !important;
+  color: #dbe7f4 !important;
+  font-family: var(--mono);
+  font-size: 0.86rem;
+  line-height: 1.7;
+  padding: 0 !important;
+  text-shadow: none !important;
+  white-space: pre;
+}
+
+/* Prism tokens, restated for a dark ground. vue.css also paints a light
+   background behind .token.operator, which has to be cleared. */
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: #6f88a4;
+  font-style: italic;
+}
+
+.token.string,
+.token.char,
+.token.attr-value,
+.token.inserted {
+  color: #c9b58a;
+}
+
+.token.keyword,
+.token.atrule,
+.token.selector,
+.token.important {
+  color: var(--tan-lift);
+}
+
+.token.number,
+.token.boolean,
+.token.regex {
+  color: #9ec7a4;
+}
+
+.token.function,
+.token.class-name {
+  color: #a9c9ec;
+}
+
+.token.property,
+.token.tag,
+.token.constant,
+.token.symbol,
+.token.attr-name,
+.token.deleted {
+  color: #d9c3a6;
+}
+
+.token.operator,
+.token.entity,
+.token.url,
+.token.variable,
+.token.punctuation {
+  color: #92a9c3;
+  background: none !important;
+}
+
+.docsify-copy-code-button {
+  background: var(--surface) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 0 11px 0 8px !important;
+  color: var(--tan-lift) !important;
+  font-family: var(--mono);
+  font-size: 0.68rem !important;
+  letter-spacing: 0.05em;
+  padding: 6px 10px !important;
+  text-transform: uppercase;
+}
+
+.docsify-copy-code-button:hover {
+  background: var(--tan) !important;
+  color: #1d1108 !important;
+}
+
+/* -------------------------------------------------------------- tables */
+
+.markdown-section table {
+  display: table;
+  width: 100%;
+  margin: 1.5rem 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  overflow: hidden;
+}
+
+.markdown-section th,
+.markdown-section td {
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 11px 14px;
+  text-align: left;
+}
+
+.markdown-section th {
+  background: var(--surface);
+  color: var(--cream);
+  font-family: var(--sans);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.markdown-section tr:last-child td {
+  border-bottom: 0;
+}
+
+.markdown-section tr:nth-child(2n) {
+  background: rgba(15, 40, 71, 0.4);
+}
+
+.markdown-section td code {
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------- blockquotes */
+
+.markdown-section blockquote {
+  margin: 1.6rem 0;
+  padding: 0.85rem 1.15rem;
+  background: rgba(133, 80, 46, 0.16);
+  border-left: 3px solid var(--tan);
+  border-radius: 0 9px 9px 0;
+  color: #e4d3c1;
+}
+
+.markdown-section blockquote p {
+  color: inherit;
+}
+
+/* ------------------------------------------------------------- chrome */
+
+/* The site header already links to the repository. */
+.github-corner {
+  display: none;
+}
+
+/* The sidebar is always visible on desktop, so the toggle only earns its
+   place once the layout collapses. */
+.sidebar-toggle {
+  display: none;
+  top: calc(var(--masthead-h) + 8px);
+  bottom: auto;
+  width: 44px;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 0;
+  border-radius: 0 9px 9px 0;
+}
+
+.sidebar-toggle:hover {
+  background: var(--raised);
+}
+
+.sidebar-toggle span {
+  background-color: var(--tan);
+}
+
+::selection {
+  background: rgba(195, 138, 93, 0.35);
+  color: var(--cream);
+}
+
+/* Docsify scrolls the sidebar and content panes independently. */
+.sidebar::-webkit-scrollbar,
+.content::-webkit-scrollbar {
+  width: 9px;
+}
+
+.sidebar::-webkit-scrollbar-thumb,
+.content::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 5px;
+}
+
+/* --------------------------------------------------------- docs index */
+
+.docs-lead {
+  margin: 0 0 1.8rem;
+  padding-left: 1.1rem;
+  border-left: 3px solid var(--tan);
+  max-width: 62ch;
+}
+
+.docs-lead p {
+  margin: 0;
+  color: var(--muted) !important;
+  font-size: 1.1rem;
+  line-height: 1.66;
+}
+
+.markdown-section .docs-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin: 1.4rem 0 2.4rem;
+}
+
+.markdown-section .docs-cards a {
+  display: block;
+  padding: 17px 18px;
+  background: rgba(15, 40, 71, 0.55);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  text-decoration: none;
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.markdown-section .docs-cards a:hover {
+  background: rgba(15, 40, 71, 0.9);
+  border-color: rgba(195, 138, 93, 0.45);
+}
+
+.markdown-section .docs-cards strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--cream);
+  font-size: 0.99rem;
+}
+
+.markdown-section .docs-cards span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+/* --------------------------------------------------------- responsive */
+
+@media screen and (max-width: 768px) {
+  /* Docsify switches .content to position:static here, so the `top` offset
+     that clears the fixed header no longer applies — pad instead. */
+  .content {
+    left: 0;
+    padding-top: calc(var(--masthead-h) + 6px);
+  }
+
+  /* Docsify's <main> is position:relative with z-index:0, so anything inside
+     it — the toggle included — is trapped beneath the fixed header no matter
+     how high its own z-index goes. Float it clear of the header instead of
+     fighting the stacking context. */
+  .sidebar-toggle {
+    display: block;
+    top: auto;
+    bottom: 18px;
+    left: 14px;
+    z-index: 60;
+    width: 46px;
+    height: 46px;
+    padding: 13px;
+    background: var(--surface);
+    border: 1px solid rgba(195, 138, 93, 0.45);
+    border-radius: 50%;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  }
+
+  .sidebar-toggle span {
+    margin: 0 auto 4px;
+  }
+
+  .sidebar-toggle span:last-child {
+    margin-bottom: 0;
+  }
+
+  .sidebar {
+    transform: translateX(calc(-1 * var(--sidebar-w)));
+  }
+
+  body.close .sidebar {
+    transform: translateX(0);
+  }
+
+  .markdown-section {
+    padding: 30px 20px 72px;
+  }
+
+  /* Let wide tables scroll as a unit rather than crushing the last column
+     into a column of single words. */
+  .markdown-section table {
+    display: block;
+    overflow-x: auto;
+  }
+
+  .markdown-section th,
+  .markdown-section td {
+    white-space: nowrap;
+  }
+}

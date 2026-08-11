@@ -1,41 +1,550 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="ug-lua-llm — one Lua client for cloud and local language models.">
-    <meta name="theme-color" content="#111827">
-    <title>ug-lua-llm — LLMs for Lua</title>
-    <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css">
-    <link rel="stylesheet" href="assets/theme.css">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ug-lua-llm — a simple Lua interface to LLM models</title>
+    <meta
+      name="description"
+      content="A unified Lua 5.1–5.4 client for cloud LLM APIs, local Ollama models, and any OpenAI-compatible endpoint. Chat, streaming, tools, and embeddings behind one normalized API."
+    />
+    <meta name="theme-color" content="#071523" />
+    <meta name="color-scheme" content="dark" />
+
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <link rel="alternate icon" href="assets/favicon.ico" sizes="32x32 16x16" />
+    <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="ug-lua-llm — a simple Lua interface to LLM models" />
+    <meta
+      property="og:description"
+      content="Chat, streaming, tools, and embeddings across cloud providers, local Ollama, and any OpenAI-compatible endpoint. Lua 5.1–5.4, MIT licensed."
+    />
+    <meta property="og:url" content="https://unabated-games.github.io/ug-lua-llm/" />
+    <meta property="og:image" content="https://unabated-games.github.io/ug-lua-llm/assets/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <script>
+      // The documentation used to live at the site root, where pages were
+      // addressed as #/docs/getting-started.md. They now live under /docs/,
+      // which is also Docsify's basePath, so the old /docs prefix has to come
+      // off the route as it moves. Runs before first paint.
+      (function () {
+        var hash = location.hash;
+        if (hash.slice(0, 2) === "#/") {
+          location.replace("docs/" + hash.replace(/^#\/docs\//, "#/"));
+        }
+      })();
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:ital,wght@0,400..700;1,400..600&display=swap"
+    />
+    <link rel="stylesheet" href="assets/base.css" />
+    <link rel="stylesheet" href="assets/site.css" />
+    <noscript>
+      <style>
+        .tabs { display: none; }
+        .panel[hidden] { display: block; }
+        .panel + .panel { border-top: 1px solid var(--line); }
+      </style>
+    </noscript>
   </head>
   <body>
-    <div id="app">Loading ug-lua-llm documentation…</div>
-    <script>
-      const sourcePreview = /\/site\/(?:index\.html)?$/.test(window.location.pathname);
-      window.$docsify = {
-        name: '<span class="brand-mark">λ</span> ug-lua-llm',
-        repo: 'unabated-games/ug-lua-llm',
-        basePath: sourcePreview ? '../' : './',
-        homepage: 'docs/index.md',
-        loadSidebar: sourcePreview ? 'site/_sidebar.md' : true,
-        relativePath: true,
-        alias: {
-          '/getting-started': '/docs/getting-started.md',
-          '/guides/(.*)': '/docs/guides/$1.md',
-          '/reference/(.*)': '/docs/reference/$1.md',
-          '/agents': '/docs/agents.md'
-        },
-        auto2top: true,
-        maxLevel: 3,
-        subMaxLevel: 2,
-        search: { placeholder: 'Search the docs', noData: 'No results' },
-        copyCode: { buttonText: 'Copy', errorText: 'Error', successText: 'Copied' }
-      };
-    </script>
-    <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/plugins/search.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/docsify-copy-code@3/dist/docsify-copy-code.min.js"></script>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="masthead">
+      <div class="shell">
+        <a class="wordmark" href="./">
+          <img src="assets/llm-beaver.svg" alt="" width="30" height="30" />
+          ug-lua-llm
+        </a>
+        <nav class="topnav" aria-label="Primary">
+          <a class="desk-only" href="#capabilities">Features</a>
+          <a class="desk-only" href="#providers">Providers</a>
+          <a href="docs/#/getting-started">Docs</a>
+          <a href="https://github.com/unabated-games/ug-lua-llm">GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="shell">
+          <img
+            class="mascot"
+            src="assets/llm-beaver.svg"
+            alt="The ug-lua-llm beaver mascot"
+            width="190"
+            height="190"
+            fetchpriority="high"
+          />
+
+          <h1>A <em>simple</em> Lua interface to LLM models</h1>
+
+          <p class="lede">
+            Chat, streaming, tool calls, and embeddings across cloud providers,
+            local Ollama models, and any OpenAI-compatible endpoint — behind a
+            single normalized API, with the provider's own response always
+            kept intact.
+          </p>
+
+          <div class="cta-row">
+            <a class="btn btn-solid" href="docs/#/getting-started">Get started</a>
+            <a class="btn btn-ghost" href="docs/#/reference/client">Read the API</a>
+          </div>
+
+          <ul class="badges">
+            <li>MIT licensed</li>
+            <li>Lua 5.1 – 5.4</li>
+            <li>Cloud and local models</li>
+            <li>No API key needed to start</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="bay" id="capabilities">
+        <div class="shell">
+          <div class="bay-head">
+            <p class="eyebrow">what it does</p>
+            <h2>A complete LLM surface in Lua</h2>
+            <p>
+              Every provider is normalized to the same shapes, so
+              <code>text</code>, <code>tool_calls</code>, <code>usage</code>,
+              <code>model</code>, <code>finish_reason</code>, and
+              <code>provider</code> mean the same thing everywhere. The
+              untouched provider payload stays available on <code>raw</code>.
+            </p>
+          </div>
+
+          <div class="caps">
+            <article class="cap">
+              <h3>Swap providers, keep your code</h3>
+              <p>
+                OpenAI, Claude, Gemini, Grok, Groq, OpenRouter, DeepSeek,
+                Mistral, and Ollama all answer the same call, and a custom
+                endpoint joins them without waiting for a new adapter.
+              </p>
+              <code class="sig">llm.new("claude"):chat(messages)</code>
+            </article>
+
+            <article class="cap">
+              <h3>Real SSE streaming</h3>
+              <p>
+                Normalized deltas as they arrive, with correct handling for
+                fragmented events, multiline data, retries, and timeouts — not
+                a buffered response pretending to stream.
+              </p>
+              <code class="sig">client:stream_chat(messages, on_delta)</code>
+            </article>
+
+            <article class="cap">
+              <h3>Tools and function calling</h3>
+              <p>
+                Define tools once with JSON Schema. The registry normalizes
+                calls across providers, runs your handlers, and continues the
+                conversation for you.
+              </p>
+              <code class="sig">client:chat_with_tools(messages, tools)</code>
+            </article>
+
+            <article class="cap">
+              <h3>Embeddings</h3>
+              <p>
+                Create embeddings from a string or a batch through OpenAI,
+                Gemini, Mistral, Ollama, or DeepSeek, and read them back in one
+                result shape.
+              </p>
+              <code class="sig">embeddings:embed({ "first", "second" })</code>
+            </article>
+
+            <article class="cap">
+              <h3>Local-first development</h3>
+              <p>
+                Ollama needs no cloud account and no API key, so you can build
+                and test the whole surface on your own machine before a single
+                credential exists.
+              </p>
+              <code class="sig">llm.new("ollama", { model = "llama3.2" })</code>
+            </article>
+
+            <article class="cap">
+              <h3>Failures you can act on</h3>
+              <p>
+                Structured, redacted errors alongside retries, rate-limit
+                headers, cancellation, lifecycle hooks, and request IDs.
+                Credentials never reach your logs.
+              </p>
+              <code class="sig">local ok, err, details = client:chat(m)</code>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="bay" id="api">
+        <div class="shell">
+          <div class="bay-head">
+            <p class="eyebrow">the api</p>
+            <h2>Start with familiar Lua</h2>
+            <p>
+              Ordinary tables in, <code>result, err, details</code> out. No
+              class hierarchy to learn and no framework to adopt.
+            </p>
+          </div>
+
+          <div class="pane">
+            <div class="tabs" role="tablist" aria-label="API examples">
+              <button class="tab" role="tab" id="tab-chat" aria-controls="panel-chat" aria-selected="true">chat</button>
+              <button class="tab" role="tab" id="tab-stream" aria-controls="panel-stream" aria-selected="false" tabindex="-1">stream</button>
+              <button class="tab" role="tab" id="tab-tools" aria-controls="panel-tools" aria-selected="false" tabindex="-1">tools</button>
+              <button class="tab" role="tab" id="tab-embed" aria-controls="panel-embed" aria-selected="false" tabindex="-1">embeddings</button>
+              <button class="tab" role="tab" id="tab-errors" aria-controls="panel-errors" aria-selected="false" tabindex="-1">errors</button>
+            </div>
+
+            <div class="panel" role="tabpanel" id="panel-chat" aria-labelledby="tab-chat" tabindex="0">
+<pre data-lua>local llm = require "ug-lua-llm"
+
+local client = llm.new("ollama", { model = "llama3.2" })
+
+local response, err = client:chat({
+  { role = "user", content = "Why is Lua a good embedding language?" },
+})
+
+assert(response, err)
+print(response.text)</pre>
+              <p class="panel-note">
+                Swap <code>"ollama"</code> for <code>"openai"</code>,
+                <code>"claude"</code>, <code>"gemini"</code>,
+                <code>"grok"</code>, <code>"groq"</code>,
+                <code>"openrouter"</code>, <code>"deepseek"</code>, or
+                <code>"mistral"</code>. Nothing else in this file changes.
+              </p>
+            </div>
+
+            <div class="panel" role="tabpanel" id="panel-stream" aria-labelledby="tab-stream" tabindex="0" hidden>
+<pre data-lua>local client = llm.new("claude", {
+  api_key = os.getenv("ANTHROPIC_API_KEY"),
+})
+
+local ok, err = client:stream_chat(messages, function(delta, full)
+  io.write(delta.content or delta.text or "")
+  io.flush()
+end)</pre>
+              <p class="panel-note">
+                Deltas normalize <code>content</code>, <code>text</code>,
+                <code>tool_calls</code>, <code>finish_reason</code>,
+                <code>provider</code>, and <code>raw</code>. Streaming falls
+                back to a regular request when a server has no working SSE.
+              </p>
+            </div>
+
+            <div class="panel" role="tabpanel" id="panel-tools" aria-labelledby="tab-tools" tabindex="0" hidden>
+<pre data-lua>local tools = {{
+  name = "get_weather",
+  description = "Get weather for a location",
+  parameters = {
+    type = "object",
+    properties = { location = { type = "string" } },
+    required = { "location" },
+  },
+}}
+
+local response = assert(client:chat_with_tools(messages, tools))
+
+for _, call in ipairs(llm.Tool.parse_tool_calls(response)) do
+  print(call.name, call.arguments.location)
+end</pre>
+              <p class="panel-note">
+                Parsed calls carry <code>{ id, name, arguments, type, raw }</code>.
+                Malformed JSON arguments are preserved rather than silently
+                discarded, so you can decide what to do about them.
+              </p>
+            </div>
+
+            <div class="panel" role="tabpanel" id="panel-embed" aria-labelledby="tab-embed" tabindex="0" hidden>
+<pre data-lua>local embeddings = llm.Embeddings.new("openai", {
+  api_key = os.getenv("OPENAI_API_KEY"),
+})
+
+local result = assert(embeddings:embed({ "first", "second" }))</pre>
+              <p class="panel-note">
+                Available for OpenAI, Gemini, Mistral, Ollama, and DeepSeek.
+              </p>
+            </div>
+
+            <div class="panel" role="tabpanel" id="panel-errors" aria-labelledby="tab-errors" tabindex="0" hidden>
+<pre data-lua>local response, err, details = client:chat(messages)
+
+if not response then
+  io.stderr:write(err, "\n")
+  print(details.kind, details.status, details.retryable)
+end</pre>
+              <p class="panel-note">
+                <code>details.kind</code> separates validation, transport,
+                timeout, serialization, decoding, and HTTP failures.
+                Credentials, tokens, and authorization headers are redacted
+                before they reach you.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="bay" id="providers">
+        <div class="shell">
+          <div class="bay-head">
+            <p class="eyebrow">providers</p>
+            <h2>Named adapters, and an escape hatch for everything else</h2>
+            <p>
+              Defaults are conveniences rather than recommendations — pass
+              <code>model</code> explicitly when reproducibility matters.
+            </p>
+          </div>
+
+          <div class="providers">
+            <article class="provider">
+              <span class="name">openai</span>
+              <span class="service">OpenAI</span>
+              <dl>
+                <dt>Default</dt><dd>gpt-5.6-terra</dd>
+                <dt>Key</dt><dd>OPENAI_API_KEY</dd>
+              </dl>
+            </article>
+            <article class="provider">
+              <span class="name">claude</span>
+              <span class="service">Anthropic</span>
+              <dl>
+                <dt>Default</dt><dd>claude-sonnet-4-6</dd>
+                <dt>Key</dt><dd>ANTHROPIC_API_KEY</dd>
+              </dl>
+            </article>
+            <article class="provider">
+              <span class="name">gemini</span>
+              <span class="service">Google</span>
+              <dl>
+                <dt>Default</dt><dd>gemini-3.6-flash</dd>
+                <dt>Key</dt><dd>GEMINI_API_KEY</dd>
+              </dl>
+            </article>
+            <article class="provider">
+              <span class="name">grok</span>
+              <span class="service">xAI</span>
+              <dl>
+                <dt>Default</dt><dd>grok-4.3</dd>
+                <dt>Key</dt><dd>GROK_API_KEY</dd>
+              </dl>
+            </article>
+            <article class="provider">
+              <span class="name">groq</span>
+              <span class="service">Groq</span>
+              <dl>
+                <dt>Default</dt><dd>llama-3.3-70b-versatile</dd>
+                <dt>Key</dt><dd>GROQ_API_KEY</dd>
+              </dl>
+            </article>
+            <article class="provider">
+              <span class="name">openrouter</span>
+              <span class="service">OpenRouter</span>
+              <dl>
+                <dt>Default</dt><dd>~openai/gpt-latest</dd>
+                <dt>Key</dt><dd>OPENROUTER_API_KEY</dd>
+              </dl>
+            </article>
+            <article class="provider">
+              <span class="name">ollama</span>
+              <span class="service">Local Ollama</span>
+              <dl>
+                <dt>Default</dt><dd>llama3.2</dd>
+                <dt>Key</dt><dd>none</dd>
+              </dl>
+            </article>
+            <article class="provider">
+              <span class="name">deepseek</span>
+              <span class="service">DeepSeek</span>
+              <dl>
+                <dt>Default</dt><dd>deepseek-v4-flash</dd>
+                <dt>Key</dt><dd>DEEPSEEK_API_KEY</dd>
+              </dl>
+            </article>
+            <article class="provider">
+              <span class="name">mistral</span>
+              <span class="service">Mistral</span>
+              <dl>
+                <dt>Default</dt><dd>mistral-large-latest</dd>
+                <dt>Key</dt><dd>MISTRAL_API_KEY</dd>
+              </dl>
+            </article>
+            <article class="provider">
+              <span class="name">openai-compatible</span>
+              <span class="service">Your server or gateway</span>
+              <dl>
+                <dt>Default</dt><dd>required</dd>
+                <dt>Key</dt><dd>optional</dd>
+              </dl>
+            </article>
+          </div>
+
+          <div class="byo">
+            <h3>Bring your own endpoint</h3>
+            <p>
+              You do not need to wait for a named adapter when a service speaks
+              OpenAI Chat Completions. Declare what the server supports, then
+              run the bundled conformance suite against its real models, chat,
+              and SSE endpoints to find out what it actually does.
+            </p>
+<pre data-lua>local client = require("ug-lua-llm").openai_compatible({
+  base_url = "http://localhost:8000/v1",
+  model = "my-model",
+  api_key = os.getenv("LLM_API_KEY"), -- optional
+  capabilities = {
+    streaming = true,
+    tools = false,
+    models = true,
+  },
+})</pre>
+            <p class="note">
+              <strong>Provider-native APIs stay reachable.</strong> OpenAI
+              Responses via <code>client:response(input)</code>, Gemini
+              Interactions via <code>client:interaction(input)</code>, Claude
+              extended thinking with <code>thinking = true</code>, and
+              reasoning options where the model supports them.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="bay" id="install">
+        <div class="shell">
+          <div class="bay-head">
+            <p class="eyebrow">install</p>
+            <h2>Install from a checkout</h2>
+            <p>
+              ug-lua-llm has not been published to LuaRocks yet. That is a
+              deliberate release step for after the public API settles.
+            </p>
+          </div>
+
+          <div class="install-grid">
+            <ol class="steps">
+              <li>
+                <div>
+                  <h3>Clone the repository</h3>
+                  <div class="copy">
+                    <code>git clone https://github.com/unabated-games/ug-lua-llm.git</code>
+                    <button type="button" data-copy>Copy</button>
+                  </div>
+                </div>
+              </li>
+              <li>
+                <div>
+                  <h3>Build the rock</h3>
+                  <div class="copy">
+                    <code>luarocks make ug-lua-llm-0.1.0-1.rockspec</code>
+                    <button type="button" data-copy>Copy</button>
+                  </div>
+                </div>
+              </li>
+              <li>
+                <div>
+                  <h3>Make a request with no API key</h3>
+                  <div class="copy">
+                    <code>lua examples/basic_chat.lua --provider ollama</code>
+                    <button type="button" data-copy>Copy</button>
+                  </div>
+                  <p>
+                    Pulls from a local Ollama install, so nothing leaves your
+                    machine and no credential is required.
+                  </p>
+                </div>
+              </li>
+            </ol>
+
+            <div>
+              <p class="note">
+                <strong>On Homebrew, use the versioned <code>lua@5.4</code>
+                formula.</strong> The unversioned formula targets Lua 5.5,
+                which the transport dependency chain does not support yet. The
+                <a href="docs/#/getting-started">installation guide</a> covers
+                exact setup and diagnostics.
+              </p>
+              <p class="note">
+                <strong>Verify an install.</strong> Run
+                <code>lua scripts/doctor.lua</code> to check your Lua version,
+                transport stack, and configured credentials before you debug
+                anything else.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="bay" id="docs">
+        <div class="shell">
+          <div class="bay-head">
+            <p class="eyebrow">documentation</p>
+            <h2>Where to next</h2>
+          </div>
+
+          <div class="links">
+            <a class="link-card" href="docs/#/getting-started">
+              <strong>Getting started</strong>
+              <span>Install, configure a provider, and make a first request.</span>
+            </a>
+            <a class="link-card" href="docs/#/guides/local-ai">
+              <strong>Local AI</strong>
+              <span>Run entirely on Ollama, or point at a custom endpoint.</span>
+            </a>
+            <a class="link-card" href="docs/#/guides/providers">
+              <strong>Provider guide</strong>
+              <span>Names, default models, and provider-native features.</span>
+            </a>
+            <a class="link-card" href="docs/#/reference/client">
+              <strong>Client API</strong>
+              <span>Chat, streaming, tools, embeddings, and capabilities.</span>
+            </a>
+            <a class="link-card" href="docs/#/reference/errors">
+              <strong>Errors and retries</strong>
+              <span>Structured failures, hooks, cancellation, and rate limits.</span>
+            </a>
+            <a class="link-card" href="docs/#/examples">
+              <strong>Runnable examples</strong>
+              <span>Working programs for chat, streaming, and tool calling.</span>
+            </a>
+            <a class="link-card" href="docs/#/agents">
+              <strong>AI coding agents</strong>
+              <span>Install the portable Agent Skill for editors and agents.</span>
+            </a>
+            <a class="link-card" href="https://github.com/unabated-games/ug-lua-llm/blob/main/llms.txt">
+              <strong>llms.txt</strong>
+              <span>Machine-readable documentation map for LLM consumers.</span>
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="shell">
+        <img src="assets/llm-beaver.svg" alt="" width="34" height="34" />
+        <p>
+          Free and open source under the
+          <a href="https://github.com/unabated-games/ug-lua-llm/blob/main/LICENSE">MIT License</a>.
+          Development is supported by
+          <a href="https://www.unabated-games.com">Unabated Games</a>.
+        </p>
+        <nav aria-label="Footer">
+          <a href="docs/#/getting-started">Documentation</a>
+          <a href="https://github.com/unabated-games/ug-lua-llm">Source</a>
+          <a href="https://github.com/unabated-games/ug-lua-llm/blob/main/CONTRIBUTING.md">Contributing</a>
+          <a href="https://github.com/unabated-games/ug-lua-llm/blob/main/SECURITY.md">Security</a>
+        </nav>
+      </div>
+    </footer>
+
+    <script src="assets/site.js"></script>
   </body>
 </html>
