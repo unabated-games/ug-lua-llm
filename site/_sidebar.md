@@ -9,6 +9,7 @@
   - [Client API](/reference/client.md)
   - [Errors and retries](/reference/errors.md)
   - [Examples](/examples/README.md)
+  - [Changelog](/changelog.md)
 - **For LLMs**
   - [Quick reference](/llms.md)
   - [Full reference](/llms-full.md)
