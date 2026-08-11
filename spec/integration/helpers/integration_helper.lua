@@ -89,7 +89,9 @@ function H.openrouter_client(overrides)
     -- Overridable: routed models come and go, and pinning one turns its
     -- retirement into a failure that looks like a library defect.
     model = env.get("OPENROUTER_MODEL") or "inception/mercury-2",
-    max_tokens = 32,
+    -- Reasoning is spent from the output allowance, so a small budget can be
+    -- consumed entirely before any content is produced.
+    max_tokens = 256,
     temperature = 0,
     timeout = 30,
     retries = 0,
@@ -98,6 +100,38 @@ function H.openrouter_client(overrides)
     for k, v in pairs(overrides) do config[k] = v end
   end
   return UGLuaLLM.new("openrouter", config)
+end
+
+--- Factory for the providers that need no special configuration beyond a key.
+--- The model is left unset so each one exercises its own documented default.
+local function simple_client(provider, key_var, overrides)
+  local config = {
+    api_key = env.get(key_var),
+    max_tokens = 64,
+    temperature = 0,
+    timeout = 30,
+    retries = 0,
+  }
+  if overrides then
+    for k, v in pairs(overrides) do config[k] = v end
+  end
+  return UGLuaLLM.new(provider, config)
+end
+
+function H.grok_client(overrides)
+  return simple_client("grok", "GROK_API_KEY", overrides)
+end
+
+function H.groq_client(overrides)
+  return simple_client("groq", "GROQ_API_KEY", overrides)
+end
+
+function H.mistral_client(overrides)
+  return simple_client("mistral", "MISTRAL_API_KEY", overrides)
+end
+
+function H.deepseek_client(overrides)
+  return simple_client("deepseek", "DEEPSEEK_API_KEY", overrides)
 end
 
 --- Prompt whose encoded request body comfortably exceeds a given size.
@@ -122,6 +156,37 @@ function H.is_account_problem(err, details)
     if text:find(pattern, 1, true) then return true end
   end
   return false
+end
+
+--- True when the provider rejected the credential itself. Kept separate from
+--- an account problem so the reason is visible in the report: a key that is
+--- absent, expired or wrong means the provider was never exercised, which is
+--- not the same as the library failing against it.
+function H.is_credential_problem(err, details)
+  local status = details and details.status
+  local text = tostring(err or ""):lower()
+  local patterns = {
+    "incorrect api key", "invalid api key", "authentication fails",
+    "invalid_api_key", "unauthorized", "no auth credentials",
+    "api key is invalid", "is invalid",
+  }
+  for _, pattern in ipairs(patterns) do
+    if text:find(pattern, 1, true) then return true end
+  end
+  -- 401 is unambiguous; 403 can also mean a disabled or region-blocked key.
+  return status == 401 or status == 403
+end
+
+--- Reason to skip, or nil when the failure should be treated as a defect.
+function H.unavailable_reason(err, details)
+  if H.is_credential_problem(err, details) then
+    return "credentials rejected (" ..
+      tostring(details and details.status or "no status") .. ")"
+  end
+  if H.is_account_problem(err, details) then
+    return "account cannot serve the request"
+  end
+  return nil
 end
 
 function H.openai_embeddings()
