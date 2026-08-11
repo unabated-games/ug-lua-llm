@@ -31,6 +31,58 @@ Defaults are conveniences, not recommendations for every workload. Pass
 - OpenAI reasoning models accept `reasoning_effort`; supported modes depend on
   the selected model.
 
+## Turning reasoning off
+
+There is no portable switch. Whether reasoning can be disabled, and how, is
+decided by the model rather than by a common API field. Three mechanisms exist,
+in rough order of reliability:
+
+**Pick a model that does not reason.** The only approach that works everywhere.
+DeepSeek splits it across two models — `deepseek-chat` does not reason and
+`deepseek-reasoner` does — and many Groq and Mistral models do not reason at
+all. For latency-sensitive dialogue this is usually the right answer.
+
+**Use the provider's effort control** where one exists:
+
+```lua
+-- xAI Grok: "none" genuinely disables it.
+local response = assert(client:chat(messages, {
+  request_options = { reasoning_effort = "none" },
+}))
+
+-- OpenAI reasoning models.
+local response = assert(client:chat(messages, { reasoning_effort = "low" }))
+```
+
+Accepted values vary by model and an unsupported one is rejected with HTTP 400
+rather than ignored, so treat the option as model-specific.
+
+**Keep it opt-in.** Claude does not use extended thinking unless asked, so the
+default already behaves as "off":
+
+```lua
+local response = assert(client:chat(messages, {
+  thinking = true, thinking_budget = 1024, max_tokens = 2000,
+}))
+```
+
+Gemini exposes a thinking budget through its own container, which reaches the
+API unchanged because provider containers are merged rather than replaced:
+
+```lua
+local response = assert(client:chat(messages, {
+  request_options = {
+    generationConfig = { thinkingConfig = { thinkingBudget = 128 } },
+  },
+}))
+```
+
+Treat that budget as an influence rather than a hard cap: some models exceed
+it, and some reject a budget of `0` outright because their reasoning cannot be
+disabled at all. Measure before relying on it — count the tokens a response
+reports as spent but not returned as text, which is the reasoning whether or
+not the API names it.
+
 ## Reasoning and the output allowance
 
 On models that reason before answering, the reasoning is spent from the same
