@@ -1,0 +1,697 @@
+/* ug-lua-llm landing page. Requires assets/base.css for tokens and header. */
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 84px;
+}
+
+body {
+  margin: 0;
+  background: var(--night);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 17px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+img,
+svg {
+  display: block;
+}
+
+a {
+  color: var(--tan-lift);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+
+a:hover {
+  color: var(--cream);
+}
+
+.masthead {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+
+/* Inline code inside prose sections. */
+.bay-head code,
+.note code,
+.panel-note code {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  color: var(--tan-lift);
+  background: rgba(195, 138, 93, 0.1);
+  border-radius: 4px;
+  padding: 0.1em 0.26em;
+}
+
+/* --------------------------------------------------------------- eyebrow */
+
+/* Section labels are written as Lua comments: this is a Lua library, so the
+   comment syntax is the honest label form rather than a generic kicker. */
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--tan);
+  margin: 0 0 14px;
+  letter-spacing: 0;
+}
+
+.eyebrow::before {
+  content: "-- ";
+  color: var(--fur);
+}
+
+/* ------------------------------------------------------------------- hero */
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(40px, 7vw, 76px) 0 var(--bay);
+  text-align: center;
+  border-bottom: 1px solid var(--line);
+}
+
+.mascot {
+  width: clamp(132px, 21vw, 190px);
+  height: auto;
+  margin: 0 auto clamp(28px, 4vw, 40px);
+}
+
+.hero h1 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: clamp(2.35rem, 5.9vw, 3.9rem);
+  line-height: 1.06;
+  letter-spacing: -0.034em;
+  color: var(--cream);
+  margin: 0 auto 22px;
+  max-width: 22ch;
+  text-wrap: balance;
+}
+
+.hero h1 em {
+  font-style: italic;
+  color: var(--tan-lift);
+}
+
+.lede {
+  max-width: 62ch;
+  margin: 0 auto 30px;
+  font-size: clamp(1.03rem, 1.9vw, 1.22rem);
+  line-height: 1.62;
+  color: var(--muted);
+  text-wrap: pretty;
+}
+
+.cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 30px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 22px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font-family: var(--sans);
+  font-size: 0.97rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.btn-solid {
+  background: var(--tan);
+  color: #1d1108;
+}
+
+.btn-solid:hover {
+  background: var(--tan-lift);
+  color: #1d1108;
+}
+
+.btn-ghost {
+  border-color: var(--line);
+  color: var(--cream);
+  background: rgba(15, 40, 71, 0.5);
+}
+
+.btn-ghost:hover {
+  border-color: var(--tan);
+  background: rgba(15, 40, 71, 0.9);
+  color: var(--cream);
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--dim);
+}
+
+.badges li + li::before {
+  content: "·";
+  margin-right: 10px;
+  color: var(--fur);
+}
+
+/* -------------------------------------------------------------- sections */
+
+.bay {
+  padding: var(--bay) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.bay-head {
+  max-width: 60ch;
+  margin-bottom: clamp(32px, 4.5vw, 52px);
+}
+
+.bay-head h2 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: clamp(1.72rem, 3.4vw, 2.32rem);
+  line-height: 1.16;
+  letter-spacing: -0.028em;
+  color: var(--cream);
+  margin: 0 0 12px;
+  text-wrap: balance;
+}
+
+.bay-head p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 1.04rem;
+  text-wrap: pretty;
+}
+
+/* ---------------------------------------------------------- capabilities */
+
+.caps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(288px, 1fr));
+  gap: 14px;
+}
+
+.cap {
+  background: linear-gradient(180deg, rgba(15, 40, 71, 0.85), rgba(10, 30, 51, 0.85));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 24px 22px 22px;
+  transition: border-color 0.18s ease, transform 0.18s ease;
+}
+
+.cap:hover {
+  border-color: rgba(195, 138, 93, 0.42);
+  transform: translateY(-2px);
+}
+
+.cap h3 {
+  font-family: var(--sans);
+  font-size: 1.06rem;
+  font-weight: 600;
+  color: var(--cream);
+  margin: 0 0 8px;
+  letter-spacing: -0.012em;
+}
+
+.cap p {
+  margin: 0;
+  font-size: 0.93rem;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.cap .sig {
+  display: block;
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px dashed rgba(195, 138, 93, 0.24);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--tan);
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+
+.cap .sig::-webkit-scrollbar {
+  display: none;
+}
+
+/* -------------------------------------------------------------- code pane */
+
+.pane {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--deep);
+  overflow: hidden;
+}
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  padding: 8px 8px 0;
+  background: rgba(15, 40, 71, 0.6);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  padding: 10px 15px;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.tab:hover {
+  color: var(--cream);
+  background: rgba(195, 138, 93, 0.09);
+}
+
+.tab[aria-selected="true"] {
+  background: var(--deep);
+  color: var(--tan-lift);
+  font-weight: 500;
+}
+
+.panel {
+  margin: 0;
+  padding: 22px clamp(18px, 3vw, 26px) 24px;
+  overflow-x: auto;
+}
+
+.panel[hidden] {
+  display: none;
+}
+
+.panel pre {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.875rem;
+  line-height: 1.72;
+  color: #dbe7f4;
+  tab-size: 2;
+}
+
+.panel-note {
+  margin: 16px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+/* Lua tokens. */
+.t-com { color: #6f88a4; font-style: italic; }
+.t-str { color: #c9b58a; }
+.t-key { color: var(--tan-lift); }
+.t-num { color: #9ec7a4; }
+.t-fn  { color: #a9c9ec; }
+
+/* --------------------------------------------------------------- copy box */
+
+.copy {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--deep);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 10px 12px 13px;
+}
+
+.copy code {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 0.79rem;
+  color: var(--cream);
+  scrollbar-width: none;
+}
+
+.copy code::-webkit-scrollbar {
+  display: none;
+}
+
+.copy button {
+  flex: none;
+  appearance: none;
+  border: 1px solid var(--line);
+  background: rgba(195, 138, 93, 0.1);
+  color: var(--tan-lift);
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 6px 11px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.copy button:hover {
+  background: var(--tan);
+  color: #1d1108;
+}
+
+/* -------------------------------------------------------------- providers */
+
+/* A 200px floor yields five columns at full width, which keeps the provider
+   cards compact and the rows evenly filled at the current adapter count. */
+.providers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.provider {
+  background: rgba(15, 40, 71, 0.55);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: 17px 18px;
+}
+
+.provider .name {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--tan-lift);
+  margin-bottom: 3px;
+}
+
+.provider .service {
+  display: block;
+  font-size: 0.93rem;
+  color: var(--cream);
+  margin-bottom: 12px;
+}
+
+/* Labels sit above their values: a side-by-side pair leaves roughly 115px for
+   the value, and the longest key (ANTHROPIC_API_KEY) needs about 127px, so it
+   would break mid-identifier. */
+.provider dl {
+  margin: 0;
+}
+
+.provider dt {
+  margin-bottom: 1px;
+  color: var(--dim);
+  font-size: 0.67rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.provider dd {
+  margin: 0 0 9px;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--muted);
+  overflow-wrap: break-word;
+}
+
+.provider dd:last-child {
+  margin-bottom: 0;
+}
+
+.byo {
+  margin-top: 14px;
+  background: linear-gradient(
+    135deg,
+    rgba(133, 80, 46, 0.24),
+    rgba(15, 40, 71, 0.6) 58%
+  );
+  border: 1px solid rgba(195, 138, 93, 0.34);
+  border-radius: var(--radius);
+  padding: clamp(22px, 3vw, 30px);
+}
+
+.byo h3 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 1.34rem;
+  letter-spacing: -0.022em;
+  color: var(--cream);
+  margin: 0 0 8px;
+}
+
+.byo p {
+  margin: 0 0 18px;
+  max-width: 62ch;
+  color: var(--muted);
+  font-size: 0.97rem;
+}
+
+/* `.byo p` outranks `.note` on specificity, so the callout has to opt back out
+   of the prose measure explicitly. */
+.byo .note {
+  max-width: none;
+  margin: 22px 0 0;
+}
+
+.byo pre {
+  margin: 0;
+  padding: 18px;
+  background: rgba(7, 21, 35, 0.7);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  line-height: 1.7;
+  color: #dbe7f4;
+}
+
+/* ---------------------------------------------------------------- install */
+
+/* The steps column carries the longest clone URL, so it gets the wider share. */
+.install-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.88fr);
+  gap: clamp(24px, 4vw, 44px);
+  align-items: start;
+}
+
+.steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+  display: grid;
+  gap: 18px;
+}
+
+.steps li {
+  counter-increment: step;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+/* Grid children default to min-width:auto, which lets the nowrap command
+   inside .copy push the box out over the next column. */
+.steps li > div {
+  min-width: 0;
+}
+
+/* Install genuinely is an ordered sequence, so the numbers carry information. */
+.steps li::before {
+  content: counter(step);
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid rgba(195, 138, 93, 0.4);
+  background: rgba(195, 138, 93, 0.08);
+  color: var(--tan);
+  font-family: var(--mono);
+  font-size: 0.83rem;
+}
+
+.steps h3 {
+  font-family: var(--sans);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--cream);
+  margin: 3px 0 9px;
+}
+
+.steps p {
+  margin: 9px 0 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.note {
+  margin: 24px 0 0;
+  padding: 15px 17px;
+  background: rgba(133, 80, 46, 0.16);
+  border-left: 3px solid var(--tan);
+  border-radius: 0 9px 9px 0;
+  font-size: 0.9rem;
+  color: #e4d3c1;
+}
+
+.note strong {
+  color: var(--cream);
+}
+
+/* ------------------------------------------------------------- next steps */
+
+.links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(258px, 1fr));
+  gap: 12px;
+}
+
+.link-card {
+  display: block;
+  background: rgba(15, 40, 71, 0.55);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: 19px 20px;
+  text-decoration: none;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.link-card:hover {
+  border-color: rgba(195, 138, 93, 0.45);
+  background: rgba(15, 40, 71, 0.85);
+}
+
+.link-card strong {
+  display: block;
+  color: var(--cream);
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 5px;
+}
+
+/* On the title, not the card, so the arrow cannot fall onto a line of its own. */
+.link-card strong::after {
+  content: " →";
+  color: var(--tan);
+}
+
+.link-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.89rem;
+  line-height: 1.55;
+}
+
+/* ---------------------------------------------------------------- footer */
+
+.footer {
+  padding: 44px 0 56px;
+}
+
+.footer .shell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px 28px;
+  align-items: center;
+}
+
+.footer img {
+  width: 34px;
+  height: 34px;
+}
+
+.footer p {
+  margin: 0;
+  margin-right: auto;
+  font-size: 0.88rem;
+  color: var(--dim);
+}
+
+.footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  font-size: 0.88rem;
+}
+
+.footer nav a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.footer nav a:hover {
+  color: var(--tan-lift);
+}
+
+/* ------------------------------------------------------------ responsive */
+
+@media (max-width: 860px) {
+  .install-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  body {
+    font-size: 16px;
+  }
+
+  .cta-row .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  /* The badge list wraps on narrow screens, and a separator that lands at the
+     start of a line reads as a typo. Space them instead. */
+  .badges {
+    gap: 4px 16px;
+  }
+
+  .badges li + li::before {
+    content: none;
+  }
+
+  .panel pre,
+  .byo pre {
+    font-size: 0.8rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}

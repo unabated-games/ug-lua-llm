@@ -1,58 +1,36 @@
-# One Lua client for every model
+# Documentation
 
-<div class="overview-lead">
-  <p>Build LLM features in Lua without coupling your application to one vendor.
-  Use the same client for OpenAI, Claude, Gemini, five other cloud adapters,
-  local Ollama models, and any OpenAI-compatible server.</p>
+<div class="docs-lead">
+  <p>ug-lua-llm gives Lua applications one interface for chat, streaming,
+  tools, embeddings, retries, and structured errors — while keeping
+  provider-specific APIs available when you need them.</p>
 </div>
 
-ug-lua-llm is an open source project from
-[Unabated Games](https://github.com/unabated-games).
-
-<p class="overview-actions">
-  <a class="primary-action" href="getting-started.md">Install and make a request</a>
-  <a class="secondary-action" href="guides/local-ai.md">Run locally with Ollama</a>
-</p>
-
-## What you can build
-
-<div class="feature-grid">
-  <article>
-    <span class="feature-kicker">One interface</span>
-    <h3>Cloud and local chat</h3>
-    <p>Switch between eight cloud providers, local Ollama, and custom endpoints without
-    rewriting your application around each provider's response format.</p>
-  </article>
-  <article>
-    <span class="feature-kicker">Real-time</span>
-    <h3>Streaming responses</h3>
-    <p>Consume normalized SSE deltas as text and tool calls arrive, with correct
-    handling for fragmented events, multiline data, retries, and timeouts.</p>
-  </article>
-  <article>
-    <span class="feature-kicker">Agentic</span>
-    <h3>Tools and function calling</h3>
-    <p>Define tools once with JSON Schema, normalize calls across providers, and
-    use the registry to execute handlers and continue the conversation.</p>
-  </article>
-  <article>
-    <span class="feature-kicker">Search and RAG</span>
-    <h3>Embeddings</h3>
-    <p>Create embeddings from strings or batches through OpenAI, Gemini,
-    Mistral, Ollama, or DeepSeek using one result shape.</p>
-  </article>
-  <article>
-    <span class="feature-kicker">No waiting</span>
-    <h3>Bring any compatible model</h3>
-    <p>Connect to a local server, inference gateway, or new vendor immediately.
-    Supply its URL, model, optional credentials, headers, and capabilities.</p>
-  </article>
-  <article>
-    <span class="feature-kicker">Production control</span>
-    <h3>Failures you can act on</h3>
-    <p>Use structured, redacted errors plus retries, rate-limit headers,
-    cancellation, lifecycle hooks, request IDs, and endpoint conformance tests.</p>
-  </article>
+<div class="docs-cards">
+  <a href="#/getting-started">
+    <strong>Getting started</strong>
+    <span>Install the package, configure a provider, and make a first request.</span>
+  </a>
+  <a href="#/guides/local-ai">
+    <strong>Local AI</strong>
+    <span>Run entirely on Ollama, or point the client at a custom endpoint.</span>
+  </a>
+  <a href="#/guides/providers">
+    <strong>Providers</strong>
+    <span>Names, default models, key variables, and provider-native APIs.</span>
+  </a>
+  <a href="#/reference/client">
+    <strong>Client API</strong>
+    <span>Chat, streaming, tools, embeddings, and capability inspection.</span>
+  </a>
+  <a href="#/reference/errors">
+    <strong>Errors and retries</strong>
+    <span>Structured failures, lifecycle hooks, cancellation, and rate limits.</span>
+  </a>
+  <a href="#/examples">
+    <strong>Examples</strong>
+    <span>Runnable programs for chat, streaming, and tool calling.</span>
+  </a>
 </div>
 
 ## Start with familiar Lua
@@ -70,36 +48,39 @@ print(response.text)
 ```
 
 Change `ollama` to `openai`, `claude`, `gemini`, `grok`, `groq`, `openrouter`,
-`deepseek`, or `mistral`. The ordinary chat contract remains the same, while
-provider-native APIs stay available when your use case needs them.
+`deepseek`, or `mistral`. The ordinary chat contract stays the same, while
+provider-native APIs remain available when your use case needs them.
 
-## More than a lowest-common denominator
+## Conventions
 
-- **Normalized by default.** Read `text`, `tool_calls`, `usage`, `model`,
-  `finish_reason`, and `provider` consistently while retaining the untouched
-  provider response in `raw`.
-- **Modern provider APIs.** Use OpenAI Responses, Gemini Interactions, Claude
+Every operation returns `result, err, details`. Normalized responses expose
+`text`, `tool_calls`, `usage`, `model`, `finish_reason`, and `provider`, and
+keep the untouched provider payload in `raw`.
+
+Never assume an OpenAI-compatible endpoint implements every capability. Declare
+what a custom server supports, then verify it with the bundled conformance
+runner.
+
+## What you get
+
+- **Normalized by default.** Read the same fields across every provider without
+  losing access to the original response.
+- **Modern provider APIs.** OpenAI Responses, Gemini Interactions, Claude
   extended thinking, multimodal content, structured outputs, reasoning options,
   and safe request-option passthrough.
 - **Local AI is first-class.** Ollama works without a cloud account or API key,
   with focused examples for chat, streaming, model selection, and tools.
-- **Compatibility is testable.** Declare custom-server capabilities locally,
-  then run the bundled conformance suite against its real models, chat, and SSE
-  endpoints.
+- **Compatibility is testable.** Run the conformance suite against a custom
+  server's real models, chat, and SSE endpoints.
 - **Lua stays broad.** The package and CI support Lua 5.1 through 5.4.
 
-## Choose your next step
+## Also here
 
-- [Install ug-lua-llm and make your first request](getting-started.md).
-- [Run entirely locally with Ollama](guides/local-ai.md).
-- [Compare providers and their native features](guides/providers.md).
-- [Explore streaming, tools, and embeddings](reference/client.md).
-- [Handle errors, retries, cancellation, and hooks](reference/errors.md).
-- [Install the portable AI coding-agent skill](agents.md).
+- [AI coding agent setup](#/agents) installs the portable Agent Skill.
+- [`llms.txt`](#/llms.md) and [`llms-full.txt`](#/llms-full.md) provide the
+  machine-readable documentation map.
+- The [source repository](https://github.com/unabated-games/ug-lua-llm) holds
+  the security policy, contributing guide, and roadmap.
 
-For runnable programs, see the [examples guide](../examples/README.md). For the
-complete machine-readable documentation map, see
-[`llms.txt`](https://github.com/unabated-games/ug-lua-llm/blob/main/llms.txt).
-
-Contributors can preview this documentation locally with
-`./scripts/serve_site.sh` from the repository root.
+Contributors can preview this site locally with `./scripts/serve_site.sh` from
+the repository root.

@@ -1,0 +1,159 @@
+/* Shared foundation for the landing page and the documentation shell:
+   design tokens, focus behaviour, and the site header.
+   Loaded before assets/site.css and assets/docs.css. */
+
+:root {
+  /* Ground is a shade deeper than the logo navy so the mascot roundel
+     separates from the page instead of dissolving into it. */
+  --night: #071523;
+  --deep: #0a1e33;
+  --surface: #0f2847; /* the logo navy, used for panels */
+  --raised: #143253;
+  --line: #1d3d5e;
+
+  --cream: #f4ece1;
+  --text: #cfddec;
+  --muted: #8ba3bf;
+  --dim: #6b839e;
+
+  --tan: #c38a5d; /* mascot muzzle */
+  --tan-lift: #e0a97a;
+  --fur: #85502e;
+
+  --sans: "Instrument Sans", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
+    monospace;
+  /* Headings share the body face, separated by weight, size and tracking
+     rather than by a second family. Swap this one line to reintroduce a
+     distinct display face. */
+  --display: var(--sans);
+
+  --gutter: clamp(20px, 5vw, 40px);
+  --bay: clamp(64px, 9vw, 116px);
+  --measure: 1160px;
+  --radius: 14px;
+  --masthead-h: 64px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+img,
+svg {
+  max-width: 100%;
+}
+
+:focus-visible {
+  outline: 2px solid var(--tan-lift);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.shell {
+  width: 100%;
+  max-width: var(--measure);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+.skip {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  background: var(--tan);
+  color: #22150c;
+  font-weight: 600;
+  padding: 10px 16px;
+  border-radius: 0 0 8px 0;
+  text-decoration: none;
+}
+
+.skip:focus {
+  left: 0;
+}
+
+/* ---------------------------------------------------------------- header */
+
+.masthead {
+  background: rgba(7, 21, 35, 0.82);
+  backdrop-filter: saturate(150%) blur(12px);
+  -webkit-backdrop-filter: saturate(150%) blur(12px);
+  border-bottom: 1px solid var(--line);
+}
+
+.masthead .shell {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  height: var(--masthead-h);
+}
+
+.wordmark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: auto;
+  /* nowrap text in a shrinkable flex item overflows its box and collides with
+     the nav on narrow screens. */
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--cream);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.wordmark img {
+  display: block;
+  width: 30px;
+  height: 30px;
+}
+
+.topnav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.topnav a {
+  padding: 7px 12px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 0.92rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.topnav a:hover {
+  background: rgba(195, 138, 93, 0.11);
+  color: var(--cream);
+}
+
+@media (max-width: 620px) {
+  .topnav .desk-only {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

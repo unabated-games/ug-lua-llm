@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Documentation — ug-lua-llm</title>
+    <meta
+      name="description"
+      content="Documentation for ug-lua-llm: a simple Lua interface to LLM models, covering cloud APIs, local Ollama models, and any OpenAI-compatible endpoint."
+    />
+    <meta name="theme-color" content="#071523" />
+    <meta name="color-scheme" content="dark" />
+
+    <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml" />
+    <link rel="alternate icon" href="../assets/favicon.ico" sizes="32x32 16x16" />
+    <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:ital,wght@0,400..700;1,400..600&display=swap"
+    />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css" />
+    <link rel="stylesheet" href="../assets/base.css" />
+    <link rel="stylesheet" href="../assets/docs.css" />
+  </head>
+  <body>
+    <!-- Rendered outside #app so Docsify never overwrites it, which keeps the
+         header identical to the landing page on every route. -->
+    <header class="masthead">
+      <div class="shell">
+        <a class="wordmark" href="../">
+          <img src="../assets/llm-beaver.svg" alt="" width="30" height="30" />
+          ug-lua-llm
+        </a>
+        <nav class="topnav" aria-label="Primary">
+          <a href="../#capabilities" class="desk-only">Features</a>
+          <a href="../#providers" class="desk-only">Providers</a>
+          <a href="../#install" class="desk-only">Install</a>
+          <a href="https://github.com/unabated-games/ug-lua-llm">GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <div id="app">Loading the ug-lua-llm documentation…</div>
+
+    <script>
+      window.$docsify = {
+        name: "Documentation",
+        nameLink: "#/",
+        repo: "unabated-games/ug-lua-llm",
+        // The shell and the Markdown it renders both live under /docs/, so
+        // every route is short and each one finds a sidebar in its own
+        // directory. scripts/build_site.sh lays the tree out to match.
+        basePath: "./",
+        homepage: "index.md",
+        loadSidebar: true,
+        relativePath: true,
+        // Extension-less convenience routes, used by the landing page links.
+        alias: {
+          "/getting-started": "/getting-started.md",
+          "/agents": "/agents.md",
+          "/examples": "/examples/README.md",
+          "/guides/([^.]+)$": "/guides/$1.md",
+          "/reference/([^.]+)$": "/reference/$1.md",
+        },
+        auto2top: true,
+        maxLevel: 3,
+        subMaxLevel: 2,
+        search: { placeholder: "Search the docs", noData: "No results" },
+        copyCode: { buttonText: "Copy", errorText: "Error", successText: "Copied" },
+      };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/plugins/search.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-lua.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/docsify-copy-code@3/dist/docsify-copy-code.min.js"></script>
+  </body>
+</html>

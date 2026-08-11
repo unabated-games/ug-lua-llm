@@ -20,12 +20,25 @@ jobs:
       - name: Check required pages
         run: |
           test -f _site/index.html
+          test -f _site/docs/index.html
+          test -f _site/docs/index.md
           test -f _site/docs/getting-started.md
+          test -f _site/docs/examples/README.md
           test -f _site/llms.txt
           test -f _site/llms-full.txt
-          test -f _site/llms.md
+          test -f _site/docs/llms.md
+          test -f _site/docs/llms-full.md
+          test -f _site/docs/_sidebar.md
           test -f _site/docs/guides/_sidebar.md
+          test -f _site/docs/reference/_sidebar.md
+          test -f _site/docs/examples/_sidebar.md
           test -f _site/skills/use-ug-lua-llm/SKILL.md
+      - name: Check site assets
+        run: |
+          for asset in base.css site.css docs.css site.js llm-beaver.svg \
+            favicon.svg favicon.ico apple-touch-icon.png og-image.png; do
+            test -f "_site/assets/$asset" || { echo "missing asset: $asset" >&2; exit 1; }
+          done
 
   deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
