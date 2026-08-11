@@ -1,6 +1,6 @@
 local UGLuaLLM = {
   _VERSION = '0.1.0',
-  _DESCRIPTION = 'Unified Lua client for LLM APIs including OpenAI, Claude, Gemini, Grok, Groq, OpenRouter, Ollama, DeepSeek, and Mistral',
+  _DESCRIPTION = 'Unified Lua client for cloud LLM APIs, local Ollama models, and OpenAI-compatible endpoints',
   _LICENSE = 'MIT',
 }
 
