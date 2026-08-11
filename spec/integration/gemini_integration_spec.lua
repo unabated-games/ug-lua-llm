@@ -14,6 +14,10 @@ describe("Gemini integration tests", function()
 
       local result, err = client:chat(messages)
 
+      if H.is_account_problem(err) then
+        pending("Gemini account unavailable: " .. tostring(err))
+        return
+      end
       assert.is_nil(err)
       assert.is_not_nil(result)
       H.assert_nonempty_string(result.content, "response content")
@@ -46,6 +50,10 @@ describe("Gemini integration tests", function()
 
       local result, err = client:chat_with_tools(messages, { H.get_weather_tool })
 
+      if H.is_account_problem(err) then
+        pending("Gemini account unavailable: " .. tostring(err))
+        return
+      end
       assert.is_nil(err)
       assert.is_not_nil(result)
       assert.is_not_nil(result.tool_calls, "response should contain tool_calls")
@@ -66,6 +74,10 @@ describe("Gemini integration tests", function()
 
       local result, err = emb.embed("Hello, world!")
 
+      if H.is_account_problem(err) then
+        pending("Gemini account unavailable: " .. tostring(err))
+        return
+      end
       assert.is_nil(err)
       H.assert_valid_embeddings(result)
     end)

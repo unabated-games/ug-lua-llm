@@ -31,6 +31,25 @@ Defaults are conveniences, not recommendations for every workload. Pass
 - OpenAI reasoning models accept `reasoning_effort`; supported modes depend on
   the selected model.
 
+## Reasoning and the output allowance
+
+On models that reason before answering, the reasoning is spent from the same
+budget as the reply. A `max_tokens` value that is comfortable for a
+non-reasoning model can therefore be consumed entirely by reasoning, and the
+response comes back with `finish_reason` set to `"length"` and `text` set to
+`""`. Nothing failed; the model never reached the answer.
+
+If that happens, either raise `max_tokens` or lower the reasoning effort:
+
+```lua
+local response = assert(client:chat(messages, { reasoning_effort = "low" }))
+```
+
+Accepted `reasoning_effort` values differ between models, and an unsupported
+one is rejected by the provider with HTTP 400 rather than ignored. Check the
+model's own documentation before setting it, and treat the option as
+model-specific rather than portable.
+
 Call `client:capabilities()` before conditionally exposing provider-specific UI.
 The result is local configuration metadata, not server discovery. Use the
 conformance runner for custom-server verification.

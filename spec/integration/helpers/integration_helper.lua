@@ -66,8 +66,13 @@ end
 function H.gemini_client(overrides)
   local config = {
     api_key = env.get("GEMINI_API_KEY"),
-    model = "gemini-2.5-flash-lite",
-    max_tokens = 64,
+    -- Track the documented default. Google retires older models for new
+    -- users, which turns a pinned one into a 404 that looks like a defect.
+    model = "gemini-3.6-flash",
+    -- Reasoning happens inside the output allowance. At 64 the model
+    -- intermittently spends the whole budget thinking and returns no text at
+    -- all, which makes the assertions flaky rather than wrong.
+    max_tokens = 256,
     temperature = 0,
     timeout = 30,
     retries = 0,
@@ -76,6 +81,47 @@ function H.gemini_client(overrides)
     for k, v in pairs(overrides) do config[k] = v end
   end
   return UGLuaLLM.new("gemini", config)
+end
+
+function H.openrouter_client(overrides)
+  local config = {
+    api_key = env.get("OPENROUTER_API_KEY"),
+    -- Overridable: routed models come and go, and pinning one turns its
+    -- retirement into a failure that looks like a library defect.
+    model = env.get("OPENROUTER_MODEL") or "inception/mercury-2",
+    max_tokens = 32,
+    temperature = 0,
+    timeout = 30,
+    retries = 0,
+  }
+  if overrides then
+    for k, v in pairs(overrides) do config[k] = v end
+  end
+  return UGLuaLLM.new("openrouter", config)
+end
+
+--- Prompt whose encoded request body comfortably exceeds a given size.
+--- Used to cover the transport path for realistic multi-kilobyte requests.
+function H.padded_prompt(instruction, bytes)
+  local padding = string.rep("padding ", math.ceil((bytes or 2048) / 8))
+  return instruction .. " Ignore the following padding: " .. padding
+end
+
+--- True when a failure is about the account rather than the library: no
+--- credit, exhausted quota, or a temporarily unavailable model. Those must not
+--- be reported as regressions, but every other error still has to fail loudly.
+function H.is_account_problem(err, details)
+  local status = details and details.status
+  if status == 402 then return true end
+  local text = tostring(err or ""):lower()
+  local patterns = {
+    "no credits", "insufficient", "quota", "billing",
+    "exceeded your current", "payment required",
+  }
+  for _, pattern in ipairs(patterns) do
+    if text:find(pattern, 1, true) then return true end
+  end
+  return false
 end
 
 function H.openai_embeddings()

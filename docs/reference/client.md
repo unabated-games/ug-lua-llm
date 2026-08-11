@@ -27,6 +27,37 @@ Common configuration includes `api_key`, `model`, `base_url`, `headers`,
 | `response(input, options)` | Use OpenAI Responses where supported |
 | `interaction(input, options)` | Use Gemini Interactions where supported |
 
+## The normalized response contract
+
+`response.text` is always a string. When a provider returns JSON `null` for the
+content — which happens when a model stops before producing any, such as on an
+exhausted output allowance — `text` is `""` rather than the JSON backend's null
+sentinel. Check `finish_reason` to tell an empty answer apart from a truncated
+one:
+
+```lua
+local response = assert(client:chat(messages))
+if response.text == "" and response.finish_reason == "length" then
+  -- The model ran out of output allowance before emitting content.
+end
+```
+
+`finish_reason` is a string or `nil`, and `tool_calls` is a table or `nil`;
+neither ever holds a null sentinel. The untouched provider payload stays in
+`raw`, where JSON `null` is preserved exactly as the backend decoded it. To
+inspect it safely, compare against the sentinel rather than testing
+truthiness, because a decoded null is truthy in Lua:
+
+```lua
+local JSON = require "ug-lua-llm.utils.json"
+if JSON.is_null(response.raw.choices[1].message.content) then
+  -- The provider explicitly sent null.
+end
+```
+
+`JSON.value(x)` returns `nil` for a null sentinel and the value otherwise, which
+makes ordinary `or` fallbacks safe against `raw`.
+
 ## Streaming
 
 ```lua

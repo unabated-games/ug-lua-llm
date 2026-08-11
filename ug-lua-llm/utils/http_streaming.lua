@@ -70,6 +70,11 @@ local function make_request(url, headers_table, payload, timeout, method, provid
       return nil, nil, message, Error.serialization(provider, message, body)
     end
     req:set_body(body)
+    -- See utils/http.lua: lua-http adds "expect: 100-continue" above 1024
+    -- bytes, which stalls against endpoints that never send the interim
+    -- response. Streaming requests carry the same prompts, so they hit the
+    -- same threshold.
+    req.headers:delete("expect")
   end
 
   local go_ok, response_headers, stream = pcall(req.go, req, timeout or 60)

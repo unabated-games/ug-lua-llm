@@ -31,6 +31,30 @@ end
 JSON.backend = backend_name
 JSON.null = backend.null
 
+-- Both backends represent JSON null with a truthy sentinel: lua-cjson uses a
+-- light userdata and dkjson uses a table. Either one survives `value or default`
+-- and escapes through the normalized API unless it is stripped explicitly.
+-- Compare by identity; the sentinels' tostring() forms vary between platforms
+-- and versions, so matching on their text is not reliable.
+function JSON.is_null(value)
+  return JSON.null ~= nil and value == JSON.null
+end
+
+-- Decoded JSON value with null collapsed to nil, so callers can use ordinary
+-- Lua fallback chains without a backend sentinel winning them.
+function JSON.value(value)
+  if value == nil or JSON.is_null(value) then return nil end
+  return value
+end
+
+-- Decoded JSON value when it is genuinely a string, otherwise nil. Guards the
+-- normalized fields that carry a string contract.
+function JSON.string_value(value)
+  value = JSON.value(value)
+  if type(value) == "string" then return value end
+  return nil
+end
+
 function JSON.encode(value)
   if backend_name == "cjson" then return backend.encode(value) end
   -- cjson, the original backend, encodes an empty Lua table as an object.

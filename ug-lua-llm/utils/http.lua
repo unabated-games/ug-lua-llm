@@ -75,9 +75,18 @@ function HttpClient:_do_request(method, url, payload, headers)
         self.config.provider_name, message, request_body)
     end
     req:set_body(request_body)
+    -- lua-http appends "expect: 100-continue" for any body over 1024 bytes.
+    -- Several LLM endpoints never send the interim 100 response, so the client
+    -- stalls waiting for it, and a final response arriving instead makes
+    -- lua-http drop the body entirely. Requests above that size then hang while
+    -- smaller ones succeed. Send the body directly instead.
+    req.headers:delete("expect")
   end
 
-  local go_ok, resp_headers, stream = pcall(req.go, req, self.config.timeout or 60)
+  local timeout = tonumber(self.config.timeout) or 60
+  local deadline = Lifecycle.now() + timeout
+
+  local go_ok, resp_headers, stream = pcall(req.go, req, timeout)
   if not go_ok or not resp_headers then
     local cause = resp_headers or stream
     local message = "HTTP request failed: " .. tostring(cause)
@@ -85,11 +94,22 @@ function HttpClient:_do_request(method, url, payload, headers)
       self.config.provider_name, message, cause)
   end
 
-  local body_ok, body = pcall(stream.get_body_as_string, stream)
+  -- The configured timeout has to cover the whole exchange. Without a deadline
+  -- here a server that sends headers and then stops writing would block
+  -- forever, and a nil return would otherwise be mistaken for an empty body.
+  local remaining = math.max(deadline - Lifecycle.now(), 0)
+  local body_ok, body, body_err = pcall(stream.get_body_as_string, stream, remaining)
   if not body_ok then
     local message = "Failed to read HTTP response: " .. tostring(body)
     return nil, message, Error.transport(
       self.config.provider_name, message, body)
+  end
+  if body == nil then
+    local message = "Failed to read HTTP response body: " .. tostring(body_err)
+    local details = Error.transport(
+      self.config.provider_name, message, body_err)
+    details.retryable = true
+    return nil, message, details
   end
 
   local code = tonumber(resp_headers:get(":status"))

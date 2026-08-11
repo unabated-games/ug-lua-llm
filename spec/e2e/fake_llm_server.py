@@ -9,6 +9,10 @@ from urllib.parse import parse_qs, urlparse
 
 
 REQUEST_COUNTS = {}
+# model -> True when any request for it carried an "Expect" header. Recorded
+# server-side so both the JSON and SSE paths can be asserted the same way,
+# without depending on a response body shape.
+EXPECT_SEEN = {}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -16,6 +20,24 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, _format, *_args):
         return
+
+    # Routes under /silent deliberately never answer "Expect: 100-continue",
+    # mirroring the LLM endpoints that stall clients which wait for it. The
+    # body is still read, so a client that just sends it succeeds normally.
+    def _silent_expect(self):
+        return self.path.startswith("/silent/")
+
+    def handle_expect_100(self):
+        if self._silent_expect():
+            return True  # proceed without sending "100 Continue"
+        return super().handle_expect_100()
+
+    # Normalized path with the /silent marker removed, so both variants share
+    # every route below.
+    def _route(self):
+        if self._silent_expect():
+            return self.path[len("/silent"):]
+        return self.path
 
     def _json(self, status, body, headers=None):
         encoded = json.dumps(body).encode()
@@ -53,10 +75,19 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(encoded)
 
     def do_GET(self):
-        if self.path == "/health":
+        route = self._route()
+        if route == "/health":
             self._json(200, {"ok": True})
-        elif self.path.startswith("/v1/models"):
-            query = parse_qs(urlparse(self.path).query)
+        elif route.startswith("/v1/expect-log"):
+            query = parse_qs(urlparse(route).query)
+            model = (query.get("model") or [""])[0]
+            self._json(200, {
+                "model": model,
+                "expect_seen": EXPECT_SEEN.get(model, False),
+                "requests": REQUEST_COUNTS.get(model, 0),
+            })
+        elif route.startswith("/v1/models"):
+            query = parse_qs(urlparse(route).query)
             models = [
                 {"id": "fake-chat"},
                 {"id": "fake-stream"},
@@ -77,9 +108,75 @@ class Handler(BaseHTTPRequestHandler):
         payload = json.loads(self.rfile.read(length) or b"{}")
         model = payload.get("model", "")
         REQUEST_COUNTS[model] = REQUEST_COUNTS.get(model, 0) + 1
+        # Recorded so tests can assert the client never negotiates
+        # 100-continue: a deterministic check that does not depend on timing.
+        expect = self.headers.get("Expect")
+        EXPECT_SEEN[model] = EXPECT_SEEN.get(model, False) or expect is not None
 
-        if self.path != "/v1/chat/completions":
+        if self._route() != "/v1/chat/completions":
             self._json(404, {"error": {"message": "route not found"}})
+            return
+
+        # Prefix match so each size case can use its own model name and get an
+        # independent Expect record.
+        if model.startswith("fake-body-size"):
+            self._json(200, {
+                "id": "chat_body_size",
+                "model": model,
+                "choices": [{
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "sized"},
+                    "finish_reason": "stop",
+                }],
+                "received_expect": expect,
+                "received_content_length": length,
+            })
+            return
+
+        # JSON null in every optional field, as returned when a model exhausts
+        # its output allowance before emitting content.
+        if model == "fake-null":
+            self._json(200, {
+                "id": "chat_null",
+                "model": model,
+                "choices": [{
+                    "index": 0,
+                    "finish_reason": "length",
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "reasoning": None,
+                        "refusal": None,
+                    },
+                }],
+                "usage": {"input_tokens": 251, "output_tokens": 30,
+                          "total_tokens": 281},
+            })
+            return
+
+        if payload.get("stream") and model == "fake-null-stream":
+            # The opening chunk carries content: null, exactly as the
+            # OpenAI-compatible wire format does.
+            events = [
+                {"choices": [{"index": 0,
+                              "delta": {"role": "assistant", "content": None}}]},
+                {"choices": [{"index": 0, "delta": {"content": "real"},
+                              "finish_reason": "stop"}]},
+            ]
+            pieces = ["data: " + json.dumps(event) + "\n\n" for event in events]
+            pieces.append("data: [DONE]\n\n")
+            self._sse(pieces)
+            return
+
+        if payload.get("stream") and model.startswith("fake-stream-large"):
+            self._sse([
+                "data: " + json.dumps({
+                    "choices": [{"index": 0, "delta": {"content": "streamed"},
+                                 "finish_reason": "stop"}],
+                    "received_expect": expect,
+                }) + "\n\n",
+                "data: [DONE]\n\n",
+            ])
             return
 
         if model == "fake-error":
@@ -115,6 +212,22 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, {"choices": []})
             except (BrokenPipeError, ConnectionResetError):
                 pass
+            return
+
+        # Sends complete headers, then stops partway through the promised body.
+        # A client whose timeout only covers headers would block here forever.
+        if model == "fake-slow-body":
+            try:
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", "512")
+                self.end_headers()
+                self.wfile.write(b'{"partial":')
+                self.wfile.flush()
+                time.sleep(10)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            self.close_connection = True
             return
 
         if model == "fake-retry" and REQUEST_COUNTS[model] == 1:

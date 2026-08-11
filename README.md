@@ -126,6 +126,19 @@ luacheck ug-lua-llm/ spec/ scripts/
 Unit tests and deterministic localhost transport tests require no API keys.
 Integration tests contact real providers and skip those without credentials.
 
+Run everything worth checking before a release in one step:
+
+```sh
+sh scripts/run_release_checks.sh          # no credentials needed
+sh scripts/run_release_checks.sh --live   # adds real provider calls
+```
+
+That covers the unit suite under both JSON backends, lint, the end-to-end
+transport tests, version consistency, and the rockspec. `--live` adds
+multi-kilobyte requests against every provider with a key in `.env`; providers
+without credentials, or with an account that cannot serve the request, are
+reported as pending rather than failures.
+
 Preview the documentation website from any repository directory with:
 
 ```sh
