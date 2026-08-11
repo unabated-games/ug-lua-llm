@@ -23,6 +23,7 @@ jobs:
           test -f _site/docs/index.html
           test -f _site/docs/index.md
           test -f _site/docs/getting-started.md
+          test -f _site/docs/changelog.md
           test -f _site/docs/examples/README.md
           test -f _site/llms.txt
           test -f _site/llms-full.txt

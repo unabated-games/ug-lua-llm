@@ -112,6 +112,7 @@ model listing, chat, and real SSE behavior against your configured endpoint.
 - [Runnable examples](examples/README.md)
 - [AI coding agent setup](docs/agents.md)
 - [LLM documentation index](llms.txt)
+- [Changelog](CHANGELOG.md)
 - [Security policy](SECURITY.md)
 - [Contributing](CONTRIBUTING.md)
 
