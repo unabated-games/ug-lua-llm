@@ -54,9 +54,10 @@ done
 
 step "lint" luacheck ug-lua-llm/ spec/ scripts/
 step "end-to-end transport" sh scripts/run_e2e.sh
-step "version consistency" lua scripts/check_version.lua \
-  ug-lua-llm-0.1.0-1.rockspec
-step "rockspec lint" luarocks lint ug-lua-llm-0.1.0-1.rockspec
+# Discovered rather than pinned, so a version bump needs no edit here.
+rockspec=$(ls ./*.rockspec | head -n 1)
+step "version consistency" lua scripts/check_version.lua "$rockspec"
+step "rockspec lint" luarocks lint "$rockspec"
 
 if [ "$live" = "1" ]; then
   # Live provider coverage: real TLS, real endpoints, real multi-kilobyte

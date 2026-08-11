@@ -48,7 +48,7 @@ checkout instead:
 ```sh
 git clone https://github.com/unabated-games/ug-lua-llm.git
 cd ug-lua-llm
-luarocks make ug-lua-llm-0.1.0-1.rockspec
+luarocks make ug-lua-llm-0.1.1-1.rockspec
 ```
 
 > On Homebrew, use the versioned `lua@5.4` formula. The unversioned formula
