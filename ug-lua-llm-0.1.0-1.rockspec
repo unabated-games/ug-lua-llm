@@ -5,16 +5,22 @@ source = {
    tag = "v0.1.0"
 }
 description = {
-   summary = "Unified Lua client for LLM APIs including OpenAI, Claude, Gemini, Grok, Groq, OpenRouter, Ollama, DeepSeek, and Mistral",
+   summary = "Unified Lua client for cloud LLM APIs, local Ollama models, and OpenAI-compatible endpoints",
    detailed = [[
-      ug-lua-llm provides a unified interface to interact with 9 AI/LLM providers:
-      OpenAI (GPT models), Anthropic (Claude), Google (Gemini), xAI (Grok),
-      Groq, OpenRouter, Ollama (local), DeepSeek, and Mistral.
+      ug-lua-llm gives Lua applications one interface for chat, streaming,
+      tool calling, and embeddings across OpenAI, Anthropic (Claude), Google
+      (Gemini), xAI (Grok), Groq, OpenRouter, DeepSeek, Mistral, and local
+      Ollama models. Any service implementing the OpenAI Chat Completions API
+      can be used directly, without waiting for a named adapter.
 
-      Features include chat/completion APIs, tool/function calling, real-time
-      SSE streaming, embeddings, extended thinking (Claude and OpenAI o-series),
-      normalized responses, rate limiting, exponential backoff with jitter,
-      and configurable logging.
+      Responses are normalized to consistent fields while the untouched
+      provider payload stays available, and provider-native APIs remain
+      reachable. Also includes structured and redacted errors, retries with
+      exponential backoff and jitter, rate-limit handling, cancellation,
+      lifecycle hooks, reasoning and extended-thinking options, configurable
+      logging, and endpoint conformance checks.
+
+      Supports Lua 5.1 through 5.4.
    ]],
    homepage = "https://github.com/unabated-games/ug-lua-llm",
    license = "MIT"
