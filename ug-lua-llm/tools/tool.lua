@@ -118,7 +118,13 @@ local OPENAI_TOOL_PROVIDERS = {
   openrouter = true,
 }
 
+-- provider_name is optional: a normalized response already records which
+-- provider produced it, so the documented one-argument form works. Passing it
+-- explicitly still wins, for callers holding a provider-native payload.
 function Tool.parse_tool_calls(response, provider_name)
+  if provider_name == nil and type(response) == "table" then
+    provider_name = response.provider
+  end
   if OPENAI_TOOL_PROVIDERS[provider_name] then
     return Tool.parse_openai_tool_calls(response)
   elseif provider_name == "claude" then
@@ -126,7 +132,8 @@ function Tool.parse_tool_calls(response, provider_name)
   elseif provider_name == "gemini" then
     return Tool.parse_gemini_tool_calls(response)
   else
-    error("Unsupported provider for tool call parsing: " .. provider_name)
+    error("Unsupported provider for tool call parsing: " ..
+      tostring(provider_name))
   end
 end
 

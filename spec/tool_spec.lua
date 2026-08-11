@@ -1,4 +1,5 @@
 local Tool = require("ug-lua-llm.tools.tool")
+local Response = require("ug-lua-llm.core.response")
 
 describe("Tool", function()
   describe("new", function()
@@ -151,6 +152,50 @@ describe("Tool", function()
         id = "call_3", ["function"] = { name = "lookup", arguments = "{" },
       }} } }} }, "openai-compatible")
       assert.are.equal("{", calls[1].arguments)
+    end)
+
+    -- The documented form passes only the response. A normalized response
+    -- records its own provider, so the second argument is optional.
+    it("infers the provider from a normalized response", function()
+      local response = Response.normalize("groq", { choices = {{ message = {
+        content = "hi",
+        tool_calls = {{ id = "call_4", type = "function", ["function"] = {
+          name = "lookup", arguments = '{"query":"Lua"}',
+        } }},
+      } }} })
+      local calls = Tool.parse_tool_calls(response)
+      assert.are.equal(1, #calls)
+      assert.are.equal("lookup", calls[1].name)
+      assert.are.equal("Lua", calls[1].arguments.query)
+    end)
+
+    it("infers the provider for a normalized Claude response", function()
+      local response = Response.normalize("claude", {
+        content = {{ type = "tool_use", id = "call_5", name = "lookup",
+                     input = { query = "Lua" } }},
+      })
+      local calls = Tool.parse_tool_calls(response)
+      assert.are.equal("lookup", calls[1].name)
+    end)
+
+    it("prefers an explicit provider over the one on the response", function()
+      -- Claude-shaped payload mislabelled as groq: the explicit argument has
+      -- to win, otherwise it would be parsed with the wrong reader.
+      local response = {
+        provider = "groq",
+        content = {{ type = "tool_use", id = "call_6", name = "lookup",
+                     input = { query = "Lua" } }},
+      }
+      local calls = Tool.parse_tool_calls(response, "claude")
+      assert.are.equal(1, #calls)
+      assert.are.equal("lookup", calls[1].name)
+    end)
+
+    it("reports an unusable provider without crashing on nil", function()
+      local ok, err = pcall(Tool.parse_tool_calls, { choices = {} })
+      assert.is_false(ok)
+      assert.matches("Unsupported provider", tostring(err), 1, true)
+      assert.matches("nil", tostring(err), 1, true)
     end)
   end)
 end)
