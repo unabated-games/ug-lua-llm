@@ -13,6 +13,10 @@ describe("Claude integration tests", function()
 
       local result, err = client:chat(messages)
 
+      if H.is_account_problem(err) then
+        pending("Claude account unavailable: " .. tostring(err))
+        return
+      end
       assert.is_nil(err)
       assert.is_not_nil(result)
       assert.is_not_nil(result.content)
@@ -48,6 +52,10 @@ describe("Claude integration tests", function()
 
       local result, err = client:chat_with_tools(messages, { H.get_weather_tool })
 
+      if H.is_account_problem(err) then
+        pending("Claude account unavailable: " .. tostring(err))
+        return
+      end
       assert.is_nil(err)
       assert.is_not_nil(result)
       assert.are.equal("tool_use", result.stop_reason)
@@ -81,6 +89,10 @@ describe("Claude integration tests", function()
         thinking_budget = 1024,
       })
 
+      if H.is_account_problem(err) then
+        pending("Claude account unavailable: " .. tostring(err))
+        return
+      end
       assert.is_nil(err)
       assert.is_not_nil(result)
       assert.is_not_nil(result.content)

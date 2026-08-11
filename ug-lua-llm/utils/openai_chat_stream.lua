@@ -1,5 +1,7 @@
 -- Accumulate OpenAI Chat Completions SSE chunks into one compatibility
 -- response while emitting provider-neutral text and tool-call delta fields.
+local JSON = require "ug-lua-llm.utils.json"
+
 local ChatStream = {}
 
 local function append_tool_call(state, delta)
@@ -71,7 +73,10 @@ function ChatStream:consume(chunk, callback)
     end
 
     local raw_delta = choice.delta or {}
-    local text = raw_delta.content ~= nil and tostring(raw_delta.content) or ""
+    -- The opening chunk of an OpenAI-compatible stream is normally
+    -- {"role":"assistant","content":null}. A bare tostring() would append the
+    -- backend's null sentinel to the accumulated text.
+    local text = JSON.string_value(raw_delta.content) or ""
     if text ~= "" then
       self.text_by_choice[slot] = self.text_by_choice[slot] .. text
       current_choice.message.content = self.text_by_choice[slot]
@@ -114,10 +119,11 @@ end
 
 function ChatStream.fallback_delta(response, provider)
   local choice = response and response.choices and response.choices[1]
-  local message = choice and choice.message or {}
-  local tool_calls = message.tool_calls
+  local message = choice and JSON.value(choice.message) or {}
+  local tool_calls = JSON.value(message.tool_calls)
   local has_tools = type(tool_calls) == "table" and next(tool_calls) ~= nil
-  local text = message.content or response and response.text or ""
+  local text = JSON.string_value(message.content) or
+    (response and JSON.string_value(response.text)) or ""
   return {
     choices = {{
       index = 0,

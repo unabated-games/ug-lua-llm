@@ -29,50 +29,31 @@
 --   )
 -- )
 
+local JSON = require "ug-lua-llm.utils.json"
+
 local StreamHelpers = {}
+
+-- Decoded JSON null is truthy, so a provider sending {"content":null} would
+-- otherwise reach the callback as the backend's sentinel. Earlier revisions
+-- filtered it by comparing tostring(value) against "userdata: (nil)", which
+-- never matched: lua-cjson renders its sentinel as "userdata: 0x0" on many
+-- platforms and dkjson's is a table. Compare identity instead.
+local function text_of(value)
+  return JSON.string_value(value)
+end
 
 -- Create a standardized content streaming callback
 -- This automatically handles different provider response formats and returns
 -- just the content text in a consistent way
 function StreamHelpers.content_callback(user_callback)
   return function(delta, full)
-    local content = nil
+    local choice = delta.choices and JSON.value(delta.choices[1])
+    local content =
+      (choice and text_of(choice.text)) or
+      (choice and JSON.value(choice.delta) and text_of(choice.delta.content)) or
+      text_of(delta.content)
 
-    -- Handle OpenAI/Groq/OpenRouter format - text completions
-    if delta.choices and delta.choices[1] and delta.choices[1].text then
-      content = delta.choices[1].text
-
-    -- Handle OpenAI/Groq/OpenRouter format - chat completions
-    elseif delta.choices and delta.choices[1] and delta.choices[1].delta and delta.choices[1].delta.content then
-      local delta_content = delta.choices[1].delta.content
-      -- Handle any content type, including light userdata
-      if type(delta_content) == "string" then
-        content = delta_content
-      else
-        content = tostring(delta_content or "")
-        -- Skip "userdata: (nil)" values
-        if content == "userdata: (nil)" then
-          content = nil
-        end
-      end
-
-    -- Handle Claude format
-    elseif delta.content then
-      local delta_content = delta.content
-      -- Handle any content type, including light userdata
-      if type(delta_content) == "string" then
-        content = delta_content
-      else
-        content = tostring(delta_content or "")
-        -- Skip "userdata: (nil)" values
-        if content == "userdata: (nil)" then
-          content = nil
-        end
-      end
-    end
-
-    -- Pass content to callback even if it's not a string, we've converted it above
-    if content then
+    if content and content ~= "" then
       user_callback(content, full)
     end
   end
@@ -85,66 +66,37 @@ function StreamHelpers.tool_call_detector(on_tool_call_detect, on_content)
   local tool_call_detected = false
 
   return function(delta, full)
-    -- Handle OpenAI/Groq/OpenRouter format - tool calls
-    if delta.choices and delta.choices[1] and delta.choices[1].delta and delta.choices[1].delta.tool_calls then
+    local choice = delta.choices and JSON.value(delta.choices[1])
+    local inner = choice and JSON.value(choice.delta)
+    local tool_calls = (inner and JSON.value(inner.tool_calls)) or
+      JSON.value(delta.tool_call)
+
+    if tool_calls then
       if not tool_call_detected then
         tool_call_detected = true
         if on_tool_call_detect then
           on_tool_call_detect()
         end
       end
-    -- Handle Claude format - tool calls
-    elseif delta.tool_call then
-      if not tool_call_detected then
-        tool_call_detected = true
-        if on_tool_call_detect then
-          on_tool_call_detect()
-        end
-      end
-    -- Handle OpenAI/Groq/OpenRouter format - content
-    elseif delta.choices and delta.choices[1] and delta.choices[1].delta and delta.choices[1].delta.content then
-      if on_content then
-        local content = delta.choices[1].delta.content
-        -- Handle any content type, including light userdata
-        if type(content) ~= "string" then
-          content = tostring(content or "")
-          -- Skip "userdata: (nil)" values
-          if content == "userdata: (nil)" then
-            return -- Skip this content
-          end
-        end
-        on_content(content)
-      end
-    -- Handle Claude format - content
-    elseif delta.content then
-      if on_content then
-        local content = delta.content
-        -- Handle any content type, including light userdata
-        if type(content) ~= "string" then
-          content = tostring(content or "")
-          -- Skip "userdata: (nil)" values
-          if content == "userdata: (nil)" then
-            return -- Skip this content
-          end
-        end
-        on_content(content)
-      end
+      return
+    end
+
+    local content = (inner and text_of(inner.content)) or text_of(delta.content)
+    if content and content ~= "" and on_content then
+      on_content(content, full)
     end
   end
 end
 
 -- Safe output writer that handles different data types
 function StreamHelpers.safe_writer(text)
-  if type(text) == "string" then
-    io.write(text)
+  local safe_text = text_of(text)
+  if safe_text == nil and JSON.value(text) ~= nil then
+    safe_text = tostring(text)
+  end
+  if safe_text and safe_text ~= "" then
+    io.write(safe_text)
     io.flush()
-  else
-    -- Convert non-string values to strings, but skip "userdata: (nil)"
-    local safe_text = tostring(text or "")
-    if safe_text ~= "userdata: (nil)" then
-      io.write(safe_text)
-      io.flush()
-    end
   end
 end
 

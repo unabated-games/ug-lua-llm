@@ -35,12 +35,17 @@ jobs:
         run: |
           luarocks install luasocket
           luarocks install dkjson
+          luarocks install lua-cjson
           luarocks install http
           luarocks install busted
 
+      # Both supported JSON backends are exercised explicitly. They disagree on
+      # how JSON null is represented, so a suite that only ever loads one of
+      # them cannot catch a sentinel escaping through the normalized API.
       - name: Run tests
         run: |
           busted --verbose --exclude-pattern="integration"
+          UG_LUA_LLM_JSON_BACKEND=cjson busted --exclude-pattern="integration"
           UG_LUA_LLM_JSON_BACKEND=dkjson busted --exclude-pattern="integration"
         env:
           LUA_PATH: "./?.lua;./?/init.lua;${{ env.LUA_PATH }};;"
