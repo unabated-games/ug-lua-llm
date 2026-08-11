@@ -1,7 +1,10 @@
 package = "ug-lua-llm"
 version = "0.1.0-1"
 source = {
-   url = "https://github.com/unabated-games/ug-lua-llm.git",
+   -- The git+ prefix is required. With a plain https:// URL LuaRocks treats
+   -- this as a file to download rather than a repository to clone, fetches
+   -- something called "ug-lua-llm.git", and fails to unpack it.
+   url = "git+https://github.com/unabated-games/ug-lua-llm.git",
    tag = "v0.1.0"
 }
 description = {
