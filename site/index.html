@@ -421,10 +421,9 @@ end</pre>
         <div class="shell">
           <div class="bay-head">
             <p class="eyebrow">install</p>
-            <h2>Install from a checkout</h2>
+            <h2>Install</h2>
             <p>
-              ug-lua-llm has not been published to LuaRocks yet. That is a
-              deliberate release step for after the public API settles.
+              Released on LuaRocks, and tested against Lua 5.1 through 5.4.
             </p>
           </div>
 
@@ -432,38 +431,37 @@ end</pre>
             <ol class="steps">
               <li>
                 <div>
-                  <h3>Clone the repository</h3>
+                  <h3>Install the rock</h3>
                   <div class="copy">
-                    <code>git clone https://github.com/unabated-games/ug-lua-llm.git</code>
+                    <code>luarocks install ug-lua-llm</code>
                     <button type="button" data-copy>Copy</button>
                   </div>
                 </div>
               </li>
               <li>
                 <div>
-                  <h3>Build the rock</h3>
+                  <h3>Check the install</h3>
                   <div class="copy">
-                    <code>luarocks make ug-lua-llm-0.1.0-1.rockspec</code>
-                    <button type="button" data-copy>Copy</button>
-                  </div>
-                </div>
-              </li>
-              <li>
-                <div>
-                  <h3>Make a request with no API key</h3>
-                  <div class="copy">
-                    <code>lua examples/basic_chat.lua --provider ollama</code>
+                    <code>lua -e 'local d=require"ug-lua-llm.doctor" d.print(d.run{})'</code>
                     <button type="button" data-copy>Copy</button>
                   </div>
                   <p>
-                    Pulls from a local Ollama install, so nothing leaves your
-                    machine and no credential is required.
+                    Reports your Lua version, transport stack, JSON backend,
+                    and configured credentials without printing secrets. Then
+                    <a href="docs/#/getting-started">make a first request</a> —
+                    local Ollama needs no account and no API key.
                   </p>
                 </div>
               </li>
             </ol>
 
             <div>
+              <p class="note">
+                <strong>Working against the source?</strong> Clone the
+                repository and run
+                <code>luarocks make ug-lua-llm-0.1.0-1.rockspec</code> to build
+                from a checkout instead of the released rock.
+              </p>
               <p class="note">
                 <strong>On Homebrew, use the versioned <code>lua@5.4</code>
                 formula.</strong> The unversioned formula targets Lua 5.5,
@@ -472,10 +470,10 @@ end</pre>
                 exact setup and diagnostics.
               </p>
               <p class="note">
-                <strong>Verify an install.</strong> Run
-                <code>lua scripts/doctor.lua</code> to check your Lua version,
-                transport stack, and configured credentials before you debug
-                anything else.
+                <strong>From a checkout, the same diagnostics run as</strong>
+                <code>lua scripts/doctor.lua</code>, which also accepts
+                <code>--provider</code>, <code>--endpoint</code>, and
+                <code>--json</code>.
               </p>
             </div>
           </div>

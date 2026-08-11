@@ -5,8 +5,14 @@
 ug-lua-llm supports Lua 5.1 through 5.4. It uses LuaSocket, lua-http, and dkjson;
 lua-cjson is an optional faster JSON backend.
 
-The project has not been published to LuaRocks yet. Install it from a source
-checkout:
+Install it from LuaRocks:
+
+```sh
+luarocks install ug-lua-llm
+```
+
+To work against the source, or to try an unreleased change, install from a
+checkout instead:
 
 ```sh
 git clone https://github.com/unabated-games/ug-lua-llm.git

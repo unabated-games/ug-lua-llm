@@ -497,10 +497,10 @@ a:hover {
 
 /* ---------------------------------------------------------------- install */
 
-/* The steps column carries the longest clone URL, so it gets the wider share. */
+/* The steps column carries the longest command, so it gets the wider share. */
 .install-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.88fr);
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
   gap: clamp(24px, 4vw, 44px);
   align-items: start;
 }

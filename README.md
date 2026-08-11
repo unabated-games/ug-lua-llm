@@ -38,16 +38,18 @@ print(response.text)
 
 ## Install
 
-The project has not been published to LuaRocks yet. Install it from a checkout:
+```sh
+luarocks install ug-lua-llm
+```
+
+To work against the source, or to try an unreleased change, install from a
+checkout instead:
 
 ```sh
 git clone https://github.com/unabated-games/ug-lua-llm.git
 cd ug-lua-llm
 luarocks make ug-lua-llm-0.1.0-1.rockspec
 ```
-
-LuaRocks publication will be a separate, deliberate release step after the
-public API has had time to settle.
 
 > On Homebrew, use the versioned `lua@5.4` formula. The unversioned formula
 > targets Lua 5.5, which is not yet supported by ug-lua-llm's transport dependency
