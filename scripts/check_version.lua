@@ -68,6 +68,25 @@ else
   check(false, "rockspec source has no tag; a release must pin one")
 end
 
+-- 4. Every module on disk is packaged. A new file that nobody adds to
+--    build.modules is absent from an installed rock, so `require` fails for
+--    users while every test that runs from the source tree still passes.
+local listing = io.popen("find ug-lua-llm -name '*.lua' 2>/dev/null")
+if listing then
+  local missing = {}
+  for path in listing:lines() do
+    if not source:find(path, 1, true) then
+      missing[#missing + 1] = path
+    end
+  end
+  listing:close()
+  if #missing > 0 then
+    table.sort(missing)
+    check(false, "not listed in build.modules, so they would be missing from " ..
+      "an installed rock: " .. table.concat(missing, ", "))
+  end
+end
+
 if #failures > 0 then
   io.stderr:write("Version consistency failed for " .. rockspec_path .. ":\n")
   for _, message in ipairs(failures) do

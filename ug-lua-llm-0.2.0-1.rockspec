@@ -58,6 +58,8 @@ build = {
       ["ug-lua-llm.core.embeddings"] = "ug-lua-llm/core/embeddings.lua",
       ["ug-lua-llm.core.response"] = "ug-lua-llm/core/response.lua",
       ["ug-lua-llm.core.error"] = "ug-lua-llm/core/error.lua",
+      ["ug-lua-llm.core.reasoning"] = "ug-lua-llm/core/reasoning.lua",
+      ["ug-lua-llm.core.structured"] = "ug-lua-llm/core/structured.lua",
 
       -- Provider implementations
       ["ug-lua-llm.providers.openai_compatible"] = "ug-lua-llm/providers/openai_compatible.lua",
