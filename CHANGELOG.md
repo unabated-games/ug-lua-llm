@@ -6,6 +6,29 @@ Notable changes to ug-lua-llm. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **The documented embeddings example did not run.**
+  `Embeddings.new("openai", { api_key = ... })` failed while building the
+  request URL, because no provider supplied a default `base_url` even though
+  the client for the same provider had one. Every embeddings provider now
+  defaults its own endpoint, so Ollama needs no configuration at all.
+- **`embeddings:embed(input)` passed the wrong argument.** The documentation
+  and the agent reference both use a colon, matching `client:chat`, but the
+  object was dot-only, so a colon call sent the embeddings object as the input
+  and failed while encoding the request. Both forms now work.
+
+### Changed
+
+- The embeddings object exposes `http` and `config`, so its transport can be
+  replaced the same way a provider's can.
+
+### Documentation
+
+- `llms.txt` and `llms-full.txt` described the pre-LuaRocks install and did not
+  mention the response contract, JSON-null handling, `request_options` merging,
+  or reasoning. Agents reading them were being pointed at a source checkout.
+
 ## [0.1.1] - 2026-08-11
 
 A correctness release. Every change is a fix; there are no API removals and no
