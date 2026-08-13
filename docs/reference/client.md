@@ -58,6 +58,52 @@ end
 `JSON.value(x)` returns `nil` for a null sentinel and the value otherwise, which
 makes ordinary `or` fallbacks safe against `raw`.
 
+## Structured output
+
+Pass a JSON Schema as `json_schema` and read the decoded result from `parsed`:
+
+```lua
+local response = assert(client:chat(messages, {
+  json_schema = {
+    name = "answer",
+    schema = {
+      type = "object",
+      properties = { answer = { type = "integer" } },
+      required = { "answer" },
+    },
+  },
+}))
+
+print(response.parsed.answer)  -- decoded
+print(response.text)           -- the raw JSON document
+```
+
+One schema works everywhere. It is carried as a flattened `text.format` on the
+OpenAI Responses API, as `response_format.json_schema` on Chat Completions
+services, as `generationConfig.responseSchema` on Gemini, and as a forced tool
+call on Claude, which has no response-format field. Gemini accepts only a
+restricted subset of JSON Schema, so unsupported keywords such as
+`additionalProperties` are removed rather than passed through and rejected.
+
+A model that refuses a schema falls back to plain JSON mode, and then to an
+ordinary reply, so the request still succeeds. Check before trusting the shape:
+
+```lua
+if response.structured_applied then
+  -- The schema was enforced by the provider.
+end
+```
+
+`client:capabilities().structured_output` reports the carrier: `"responses"`,
+`"chat"`, `"schema"`, `"tool"`, or `false`.
+
+## Reasoning
+
+`reasoning` accepts `false`/`"none"`, `"low"`, `"medium"`, `"high"`, or `true`.
+See the [provider guide](../guides/providers.md) for what each provider can
+actually honour, `response.reasoning_applied` for whether it did, and
+`response.usage.reasoning_tokens` for what it cost.
+
 ## Streaming
 
 ```lua

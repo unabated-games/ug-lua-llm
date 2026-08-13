@@ -6,8 +6,47 @@ Notable changes to ug-lua-llm. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-13
+
+Adds normalized control over two things that previously required knowing each
+provider's own dialect: how much a model reasons, and whether it answers with a
+schema. Both degrade rather than fail, because several providers reject the
+option outright on models that do not support it.
+
+### Added
+
+- **`reasoning` option.** Accepts `false`/`"none"`, `"low"`, `"medium"`,
+  `"high"`, or `true`, and is translated per provider: an effort string for
+  OpenAI-style services, a thinking budget for Gemini, and an opt-in block for
+  Claude. Asking for less reasoning never turns a working request into an
+  error: where a model refuses the control, the request is retried without it
+  and `response.reasoning_applied` is `false`.
+- **`json_schema` option** with the decoded result on `response.parsed`. One
+  schema covers every provider, carried as a flattened `text.format` on the
+  OpenAI Responses API, `response_format.json_schema` on Chat Completions
+  services, `generationConfig.responseSchema` on Gemini, and a forced tool call
+  on Claude, which has no response-format field. A model that refuses a schema
+  falls back to plain JSON mode and then to an ordinary reply, with
+  `response.structured_applied` reporting which happened.
+- **`usage.reasoning_tokens`**, so the cost of thinking is visible rather than
+  inferred from the gap between a total and its parts.
+- **`capabilities().reasoning_control` and `capabilities().structured_output`**,
+  describing what a provider can honour before a request is made.
+
 ### Fixed
 
+- **Structured output was broken on OpenAI.** `response_format` was nested
+  under `text.format`, but the Responses API requires the format flattened, so
+  a JSON Schema request failed with `Missing required parameter:
+  'text.format.name'`.
+- **Gemini rejected ordinary JSON Schemas.** Its `responseSchema` accepts a
+  restricted subset and errors on an unknown keyword rather than ignoring it,
+  so a schema containing `additionalProperties` — which every other provider
+  accepts — failed the request. Unsupported keywords are now removed.
+- **Normalized `usage` was missing for most providers.** It was only rebuilt
+  when a payload used `input_tokens`, so the many services reporting
+  `prompt_tokens` had their provider-shaped usage passed straight through and
+  the normalized fields were simply absent.
 - **The documented embeddings example did not run.**
   `Embeddings.new("openai", { api_key = ... })` failed while building the
   request URL, because no provider supplied a default `base_url` even though
@@ -15,8 +54,8 @@ Notable changes to ug-lua-llm. The format follows
   defaults its own endpoint, so Ollama needs no configuration at all.
 - **`embeddings:embed(input)` passed the wrong argument.** The documentation
   and the agent reference both use a colon, matching `client:chat`, but the
-  object was dot-only, so a colon call sent the embeddings object as the input
-  and failed while encoding the request. Both forms now work.
+  object was dot-only, so a colon call sent the embeddings object as the input.
+  Both forms now work.
 
 ### Changed
 
@@ -25,9 +64,9 @@ Notable changes to ug-lua-llm. The format follows
 
 ### Documentation
 
-- `llms.txt` and `llms-full.txt` described the pre-LuaRocks install and did not
-  mention the response contract, JSON-null handling, `request_options` merging,
-  or reasoning. Agents reading them were being pointed at a source checkout.
+- `llms.txt` and `llms-full.txt` described the pre-LuaRocks install and none of
+  the contracts that changed in 0.1.1. Agents reading them were being pointed
+  at a source checkout.
 
 ## [0.1.1] - 2026-08-11
 
@@ -88,6 +127,7 @@ Initial public release. A unified Lua 5.1–5.4 client for cloud LLM APIs, local
 Ollama models, and any OpenAI-compatible endpoint, with chat, streaming, tool
 calling, embeddings, retries, and structured errors behind one normalized API.
 
-[Unreleased]: https://github.com/unabated-games/ug-lua-llm/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/unabated-games/ug-lua-llm/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/unabated-games/ug-lua-llm/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/unabated-games/ug-lua-llm/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/unabated-games/ug-lua-llm/releases/tag/v0.1.0

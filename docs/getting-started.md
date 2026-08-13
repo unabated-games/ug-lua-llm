@@ -17,7 +17,7 @@ checkout instead:
 ```sh
 git clone https://github.com/unabated-games/ug-lua-llm.git
 cd ug-lua-llm
-luarocks make ug-lua-llm-0.1.1-1.rockspec
+luarocks make ug-lua-llm-0.2.0-1.rockspec
 ```
 
 On macOS, Homebrew's unversioned Lua currently targets a newer Lua release than

@@ -33,9 +33,35 @@ Defaults are conveniences, not recommendations for every workload. Pass
 
 ## Turning reasoning off
 
-There is no portable switch. Whether reasoning can be disabled, and how, is
-decided by the model rather than by a common API field. Three mechanisms exist,
-in rough order of reliability:
+Use the normalized `reasoning` option. It accepts `false` (or `"none"`) to
+minimize reasoning, `"low"`, `"medium"`, `"high"`, or `true` for a middling
+default, and is translated into whatever the provider understands:
+
+```lua
+local response = assert(client:chat(messages, { reasoning = false }))
+```
+
+Asking for less reasoning never turns a working request into an error. Where a
+model rejects the control — Groq and Mistral refuse `reasoning_effort` on models
+that do not reason, and some Gemini models refuse a zero thinking budget — the
+request is retried without it, and the response reports what happened:
+
+```lua
+if response.reasoning_applied == false then
+  -- The reply is valid, but the model would not honour the request.
+end
+```
+
+`client:capabilities().reasoning_control` says what to expect before you ask:
+`"effort"`, `"budget"` (may refuse zero, so cannot always be disabled),
+`"opt_in"` (off unless requested), or `false`.
+
+`response.usage.reasoning_tokens` reports what thinking cost, so a change can be
+confirmed rather than assumed.
+
+### What each provider does underneath
+
+Three mechanisms exist, in rough order of reliability:
 
 **Pick a model that does not reason.** The only approach that works everywhere.
 DeepSeek splits it across two models — `deepseek-chat` does not reason and

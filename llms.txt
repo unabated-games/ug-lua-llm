@@ -21,6 +21,7 @@ Install with `luarocks install ug-lua-llm`.
 Important conventions: `local result, err, details = operation(...)`; normalized
 responses expose `text`, `tool_calls`, `usage`, `model`, `finish_reason`,
 `provider`, and `raw`; `text` is always a string, and JSON null never reaches a
-normalized field though it is preserved in `raw`; reasoning is spent from the
-output allowance and cannot be disabled portably; never assume an
+normalized field though it is preserved in `raw`; reasoning is controlled with the
+`reasoning` option and a JSON Schema with `json_schema` (read `response.parsed`),
+both degrading rather than failing when a model refuses them; never assume an
 OpenAI-compatible endpoint implements all capabilities.

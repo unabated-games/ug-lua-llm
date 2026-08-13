@@ -57,10 +57,20 @@ function Provider:capabilities()
   local function implemented(method)
     return type(self[method]) == "function" and self[method] ~= Provider[method]
   end
+  local Reasoning = require "ug-lua-llm.core.reasoning"
   local result = {
     provider = name,
     model = self.config.model,
     source = "configured",
+    -- What `reasoning` can achieve here: an effort string, a token budget that
+    -- may refuse zero, an opt-in block that is off by default, or false when
+    -- the provider offers no control at all. Model-level support still varies,
+    -- which is why an unsupported request degrades rather than failing.
+    reasoning_control = Reasoning.control(name),
+    -- How a schema is carried: "responses", "chat", "schema", "tool", or
+    -- false. Model support varies within a provider, so an unsupported
+    -- request degrades to plain JSON mode and then to an ordinary reply.
+    structured_output = require("ug-lua-llm.core.structured").format(name),
     chat = implemented("chat"),
     completion = implemented("complete"),
     tools = implemented("chat_with_tools"),
