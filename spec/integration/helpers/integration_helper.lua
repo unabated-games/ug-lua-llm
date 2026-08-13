@@ -134,6 +134,90 @@ function H.deepseek_client(overrides)
   return simple_client("deepseek", "DEEPSEEK_API_KEY", overrides)
 end
 
+-- Local Ollama ------------------------------------------------------------
+-- Ollama needs no credentials, so these run for any contributor with a server
+-- up. Models are discovered rather than pinned: nobody's local library matches
+-- anyone else's, and a hardcoded name would skip everywhere but one machine.
+
+local OLLAMA_BASE_URL = env.get("OLLAMA_BASE_URL") or "http://localhost:11434/v1"
+
+local ollama_models_cache
+
+--- Model ids the local server currently has, or nil when it is not running.
+local function ollama_models()
+  if ollama_models_cache ~= nil then
+    return ollama_models_cache or nil
+  end
+  local http = require("ug-lua-llm.utils.http").new({ timeout = 3, retries = 0 })
+  local response = http:get(OLLAMA_BASE_URL .. "/models")
+  if not response or response.status ~= 200 or type(response.body) ~= "table" then
+    ollama_models_cache = false
+    return nil
+  end
+  local ids = {}
+  for _, entry in ipairs(response.body.data or {}) do
+    if type(entry.id) == "string" then ids[#ids + 1] = entry.id end
+  end
+  ollama_models_cache = ids
+  return ids
+end
+
+function H.ollama_available()
+  local models = ollama_models()
+  return models ~= nil and #models > 0
+end
+
+local function pick_model(want_embedding)
+  local models = ollama_models()
+  if not models then return nil end
+  for _, id in ipairs(models) do
+    local is_embedding = id:lower():find("embed", 1, true) ~= nil
+    if is_embedding == want_embedding then return id end
+  end
+  return nil
+end
+
+function H.ollama_chat_model()
+  return env.get("OLLAMA_MODEL") or pick_model(false)
+end
+
+function H.ollama_embedding_model()
+  return env.get("OLLAMA_EMBEDDING_MODEL") or pick_model(true)
+end
+
+function H.ollama_client(overrides)
+  local config = {
+    model = H.ollama_chat_model(),
+    base_url = OLLAMA_BASE_URL,
+    max_tokens = 128,
+    temperature = 0,
+    -- Local inference on CPU is far slower than a hosted endpoint.
+    timeout = 180,
+    retries = 0,
+  }
+  if overrides then
+    for k, v in pairs(overrides) do config[k] = v end
+  end
+  return UGLuaLLM.new("ollama", config)
+end
+
+--- The openai-compatible adapter pointed at Ollama, so the generic adapter is
+--- covered against a real server without needing a cloud account.
+function H.openai_compatible_client(overrides)
+  local config = {
+    model = H.ollama_chat_model(),
+    base_url = OLLAMA_BASE_URL,
+    max_tokens = 128,
+    temperature = 0,
+    timeout = 180,
+    retries = 0,
+  }
+  if overrides then
+    for k, v in pairs(overrides) do config[k] = v end
+  end
+  return UGLuaLLM.openai_compatible(config)
+end
+
 --- Prompt whose encoded request body comfortably exceeds a given size.
 --- Used to cover the transport path for realistic multi-kilobyte requests.
 function H.padded_prompt(instruction, bytes)

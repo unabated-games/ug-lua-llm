@@ -6,9 +6,10 @@ OpenAI-compatible Chat Completions endpoints.
 
 ## Install and import
 
-    git clone https://github.com/unabated-games/ug-lua-llm.git
-    cd ug-lua-llm
-    luarocks make ug-lua-llm-0.1.1-1.rockspec
+    luarocks install ug-lua-llm
+
+To work against the source, or to try an unreleased change, clone the
+repository and run `luarocks make ug-lua-llm-0.1.1-1.rockspec` instead.
 
     local llm = require "ug-lua-llm"
     local client = llm.new("openai", {
@@ -43,6 +44,16 @@ Normalized responses expose these fields where available: text, tool_calls,
 usage, model, finish_reason, provider, raw. Do not parse provider wire formats
 when a normalized field exists. Use raw only for provider-specific data.
 
+text is always a string, never nil. A model that stops before producing content
+returns "" with finish_reason "length"; check finish_reason to tell an empty
+answer from a truncated one. finish_reason is a string or nil and tool_calls is
+a table or nil. JSON null never reaches these fields.
+
+raw is the untouched provider payload, so JSON null is preserved there as the
+backend's sentinel, which is truthy in Lua. Test it with
+`require("ug-lua-llm.utils.json").is_null(value)` rather than `if value then`;
+`JSON.value(value)` returns nil for null and the value otherwise.
+
 Client methods:
 
 - chat(messages, options)
@@ -67,6 +78,21 @@ handler registration and automatic execution.
 Embeddings: `llm.Embeddings.new(provider, config):embed(input, options)` supports
 OpenAI, Gemini, Mistral, Ollama, and DeepSeek.
 
+## Reasoning
+
+Reasoning is spent from the same allowance as the reply, so a small max_tokens
+can be consumed entirely before content is produced. There is no portable
+switch for turning it off. Selecting a non-reasoning model is the only approach
+that works everywhere; some providers accept reasoning_effort (values are
+model-specific and an unsupported one is rejected with HTTP 400); Claude does
+not reason unless `thinking = true` is passed; and some models cannot disable
+it at all.
+
+Provider-specific request fields go in `request_options`, which is merged into
+the generated payload. Nested containers are merged rather than replaced, so
+`request_options = { generationConfig = { thinkingConfig = { ... } } }` reaches
+Gemini without discarding the fields the client generates.
+
 ## Safe implementation rules
 
 - Check errors; do not assume a response exists.
@@ -78,5 +104,5 @@ OpenAI, Gemini, Mistral, Ollama, and DeepSeek.
 - Keep `/v1` in common Ollama and OpenAI-compatible base URLs.
 - Use `lua scripts/doctor.lua` when installed rocks cannot be required.
 
-See docs/index.md for human documentation and examples/README.md for runnable
-programs.
+See docs/index.md for human documentation, examples/README.md for runnable
+programs, and CHANGELOG.md for what changed between releases.

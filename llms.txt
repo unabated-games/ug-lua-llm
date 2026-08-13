@@ -12,10 +12,15 @@ Canonical documentation:
 - [Errors](docs/reference/errors.md): structured failures, retries, and hooks
 - [Examples](examples/README.md): runnable programs
 - [Agent setup](docs/agents.md): install the portable Agent Skill
+- [Changelog](CHANGELOG.md): what changed between releases
 - [Full LLM reference](llms-full.txt): standalone machine-oriented API context
 - [Source](https://github.com/unabated-games/ug-lua-llm)
 
+Install with `luarocks install ug-lua-llm`.
+
 Important conventions: `local result, err, details = operation(...)`; normalized
 responses expose `text`, `tool_calls`, `usage`, `model`, `finish_reason`,
-`provider`, and `raw`; never assume an OpenAI-compatible endpoint implements
-all capabilities.
+`provider`, and `raw`; `text` is always a string, and JSON null never reaches a
+normalized field though it is preserved in `raw`; reasoning is spent from the
+output allowance and cannot be disabled portably; never assume an
+OpenAI-compatible endpoint implements all capabilities.

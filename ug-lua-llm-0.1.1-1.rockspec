@@ -25,13 +25,17 @@ description = {
 
       Supports Lua 5.1 through 5.4.
    ]],
-   homepage = "https://github.com/unabated-games/ug-lua-llm",
+   homepage = "https://unabated-games.github.io/ug-lua-llm/",
    license = "MIT"
 }
 dependencies = {
    "lua >= 5.1, < 5.5",
    "luasocket >= 3.0rc1-2",
    "dkjson >= 2.6",
+   -- lua-http decides when to negotiate "Expect: 100-continue", which the
+   -- transport suppresses because several endpoints never answer it. Keep the
+   -- floor explicit so that behaviour is pinned to a known implementation; see
+   -- ug-lua-llm/utils/http.lua before raising it.
    "http >= 0.4"
 }
 build = {
