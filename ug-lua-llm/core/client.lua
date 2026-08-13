@@ -1,7 +1,72 @@
 local Config = require 'ug-lua-llm.core.config'
 local Error = require 'ug-lua-llm.core.error'
+local Reasoning = require 'ug-lua-llm.core.reasoning'
+local Structured = require 'ug-lua-llm.core.structured'
 
 local Client = {}
+
+-- Run a provider call with the normalized `reasoning` option translated into
+-- whatever this provider understands.
+--
+-- Providers disagree about the option's very existence: Groq and Mistral reject
+-- reasoning_effort with a 400 on models that do not reason, and some Gemini
+-- models refuse a zero thinking budget. Asking for less reasoning must never
+-- turn a working request into a failure, so the attempts run best-first and the
+-- last one always sends no reasoning control at all.
+function Client:_with_reasoning(options, invoke)
+  local provider_config = self.provider.config or {}
+  local provider_name = provider_config.provider_name
+
+  local level, level_error = Reasoning.level(options.reasoning)
+  if options.reasoning ~= nil and not level then
+    return nil, level_error, Error.validation(
+      provider_name, level_error, "invalid_reasoning")
+  end
+
+  local spec, spec_error = Structured.spec(options.json_schema)
+  if options.json_schema ~= nil and not spec then
+    return nil, spec_error, Error.validation(
+      provider_name, spec_error, "invalid_json_schema")
+  end
+
+  -- Two independent ladders. The schema is the outer one because a model that
+  -- refuses a schema usually refuses it however hard it is thinking.
+  local schema_attempts = Structured.attempts(provider_name, spec, options)
+  local result, err, details
+
+  for schema_index, build_schema in ipairs(schema_attempts) do
+    local schema_options = build_schema()
+    local reasoning_attempts =
+      Reasoning.attempts(provider_name, level, schema_options)
+
+    for index, build in ipairs(reasoning_attempts) do
+      local attempt_options = build()
+      -- These are this library's own options; providers never see them.
+      attempt_options.reasoning = nil
+      attempt_options.json_schema = nil
+      result, err, details = invoke(attempt_options)
+
+      if result then
+        -- Report compliance separately from success, so a caller can tell a
+        -- degraded request from one that did what was asked.
+        if index > 1 then result.reasoning_applied = false end
+        if spec then
+          result.structured_applied = schema_index == 1
+          Structured.attach(result, provider_name)
+        end
+        return result, err, details
+      end
+
+      if index == #reasoning_attempts then break end
+      if not Reasoning.refused(err, details) then break end
+    end
+
+    if schema_index == #schema_attempts then return result, err, details end
+    if not Structured.refused(err, details) then return result, err, details end
+  end
+
+  return result, err, details
+end
 
 -- Create a new LLM client
 function Client.new(provider, config)
@@ -19,8 +84,9 @@ function Client:complete(prompt, options)
   options = options or {}
   local merged_options = Config.merge(self.config, options)
 
-  -- Delegate to provider's completion method
-  return self.provider:complete(prompt, merged_options)
+  return self:_with_reasoning(merged_options, function(opts)
+    return self.provider:complete(prompt, opts)
+  end)
 end
 
 -- Send a chat message
@@ -28,8 +94,9 @@ function Client:chat(messages, options)
   options = options or {}
   local merged_options = Config.merge(self.config, options)
 
-  -- Delegate to provider's chat method
-  return self.provider:chat(messages, merged_options)
+  return self:_with_reasoning(merged_options, function(opts)
+    return self.provider:chat(messages, opts)
+  end)
 end
 
 -- Process a chat message with tools
@@ -37,8 +104,9 @@ function Client:chat_with_tools(messages, tools, options)
   options = options or {}
   local merged_options = Config.merge(self.config, options)
 
-  -- Delegate to provider's chat_with_tools method
-  return self.provider:chat_with_tools(messages, tools, merged_options)
+  return self:_with_reasoning(merged_options, function(opts)
+    return self.provider:chat_with_tools(messages, tools, opts)
+  end)
 end
 
 -- Stream a text completion
@@ -46,8 +114,9 @@ function Client:stream_complete(prompt, callback, options)
   options = options or {}
   local merged_options = Config.merge(self.config, options)
 
-  -- Delegate to provider's stream_complete method
-  return self.provider:stream_complete(prompt, callback, merged_options)
+  return self:_with_reasoning(merged_options, function(opts)
+    return self.provider:stream_complete(prompt, callback, opts)
+  end)
 end
 
 -- Stream a chat response
@@ -55,8 +124,9 @@ function Client:stream_chat(messages, callback, options)
   options = options or {}
   local merged_options = Config.merge(self.config, options)
 
-  -- Delegate to provider's stream_chat method
-  return self.provider:stream_chat(messages, callback, merged_options)
+  return self:_with_reasoning(merged_options, function(opts)
+    return self.provider:stream_chat(messages, callback, opts)
+  end)
 end
 
 -- Stream a chat response with tools
@@ -64,8 +134,9 @@ function Client:stream_chat_with_tools(messages, tools, callback, options)
   options = options or {}
   local merged_options = Config.merge(self.config, options)
 
-  -- Delegate to provider's stream_chat_with_tools method
-  return self.provider:stream_chat_with_tools(messages, tools, callback, merged_options)
+  return self:_with_reasoning(merged_options, function(opts)
+    return self.provider:stream_chat_with_tools(messages, tools, callback, opts)
+  end)
 end
 
 -- Get available models

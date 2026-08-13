@@ -9,7 +9,7 @@ OpenAI-compatible Chat Completions endpoints.
     luarocks install ug-lua-llm
 
 To work against the source, or to try an unreleased change, clone the
-repository and run `luarocks make ug-lua-llm-0.1.1-1.rockspec` instead.
+repository and run `luarocks make ug-lua-llm-0.2.0-1.rockspec` instead.
 
     local llm = require "ug-lua-llm"
     local client = llm.new("openai", {
@@ -80,18 +80,32 @@ OpenAI, Gemini, Mistral, Ollama, and DeepSeek.
 
 ## Reasoning
 
-Reasoning is spent from the same allowance as the reply, so a small max_tokens
-can be consumed entirely before content is produced. There is no portable
-switch for turning it off. Selecting a non-reasoning model is the only approach
-that works everywhere; some providers accept reasoning_effort (values are
-model-specific and an unsupported one is rejected with HTTP 400); Claude does
-not reason unless `thinking = true` is passed; and some models cannot disable
-it at all.
+Use the `reasoning` option: false or "none" to minimize, "low", "medium",
+"high", or true. It is translated per provider, and asking for less reasoning
+never turns a working request into an error: where a model refuses the control
+the request is retried without it and `response.reasoning_applied` is false.
+`response.usage.reasoning_tokens` reports what thinking cost.
+`client:capabilities().reasoning_control` is "effort", "budget" (may refuse a
+zero budget), "opt_in" (off unless asked), or false.
 
-Provider-specific request fields go in `request_options`, which is merged into
-the generated payload. Nested containers are merged rather than replaced, so
-`request_options = { generationConfig = { thinkingConfig = { ... } } }` reaches
-Gemini without discarding the fields the client generates.
+Reasoning is spent from the same allowance as the reply, so a small max_tokens
+can be consumed entirely before content is produced.
+
+## Structured output
+
+Pass a JSON Schema as `json_schema` and read `response.parsed` for the decoded
+object; `response.text` still holds the raw JSON document. One schema works for
+every provider. A model that refuses a schema falls back to plain JSON mode and
+then to an ordinary reply, so check `response.structured_applied` before
+trusting the shape. `client:capabilities().structured_output` is "responses",
+"chat", "schema", "tool", or false.
+
+## Provider-specific fields
+
+Anything without a normalized option goes in `request_options`, which is merged
+into the generated payload. Nested containers are merged rather than replaced,
+so `request_options = { generationConfig = { ... } }` reaches Gemini without
+discarding the fields the client generates.
 
 ## Safe implementation rules
 

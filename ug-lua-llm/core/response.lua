@@ -23,6 +23,24 @@ local function text_value(...)
   return ""
 end
 
+-- Reasoning is billed as output but never returned as text, and each provider
+-- reports it differently: an explicit count, or only the gap between the total
+-- and the parts. Surface one number so callers can see what thinking cost.
+local function reasoning_tokens(usage, prompt_tokens, completion_tokens, total)
+  local details = usage.completion_tokens_details or usage.output_tokens_details
+  local explicit = details and (value(details.reasoning_tokens) or
+    value(details.thoughts_tokens))
+  explicit = explicit or value(usage.reasoning_tokens) or
+    value(usage.thoughtsTokenCount)
+  if explicit then return explicit end
+  -- Derived only when the provider gives a total that exceeds its own parts.
+  if total and prompt_tokens and completion_tokens then
+    local gap = total - prompt_tokens - completion_tokens
+    if gap > 0 then return gap end
+  end
+  return nil
+end
+
 local function table_value(candidate)
   candidate = value(candidate)
   if type(candidate) == "table" then return candidate end
@@ -54,10 +72,15 @@ function Response.normalize(provider, raw)
     result.finish_reason = string_value(raw.stop_reason)
     local usage = table_value(raw.usage)
     if usage then
+      local prompt_tokens = value(usage.input_tokens)
+      local completion_tokens = value(usage.output_tokens)
+      local total = (prompt_tokens or 0) + (completion_tokens or 0)
       result.usage = {
-        prompt_tokens = value(usage.input_tokens),
-        completion_tokens = value(usage.output_tokens),
-        total_tokens = (value(usage.input_tokens) or 0) + (value(usage.output_tokens) or 0),
+        prompt_tokens = prompt_tokens,
+        completion_tokens = completion_tokens,
+        total_tokens = total,
+        reasoning_tokens = reasoning_tokens(usage, prompt_tokens,
+          completion_tokens, total),
         raw = usage,
       }
     end
@@ -65,10 +88,15 @@ function Response.normalize(provider, raw)
     result.text = text_value(raw.content)
     local usage = table_value(raw.usage)
     if usage and value(usage.total_input_tokens) then
+      local prompt_tokens = value(usage.total_input_tokens)
+      local completion_tokens = value(usage.total_output_tokens)
+      local total = value(usage.total_tokens)
       result.usage = {
-        prompt_tokens = value(usage.total_input_tokens),
-        completion_tokens = value(usage.total_output_tokens),
-        total_tokens = value(usage.total_tokens),
+        prompt_tokens = prompt_tokens,
+        completion_tokens = completion_tokens,
+        total_tokens = total,
+        reasoning_tokens = reasoning_tokens(usage, prompt_tokens,
+          completion_tokens, total),
         raw = usage,
       }
     end
@@ -85,11 +113,21 @@ function Response.normalize(provider, raw)
     result.finish_reason = string_value(choice and choice.finish_reason) or
       string_value(raw.finish_reason)
     local usage = table_value(raw.usage)
-    if usage and value(usage.input_tokens) then
+    -- Two field namings are in circulation: Responses-style input/output and
+    -- Chat-Completions-style prompt/completion. Only the first was recognised,
+    -- so most providers' usage was passed through provider-shaped and the
+    -- normalized fields were simply absent.
+    if usage and (value(usage.input_tokens) or value(usage.prompt_tokens)) then
+      local prompt_tokens = value(usage.input_tokens) or value(usage.prompt_tokens)
+      local completion_tokens = value(usage.output_tokens) or
+        value(usage.completion_tokens)
+      local total = value(usage.total_tokens)
       result.usage = {
-        prompt_tokens = value(usage.input_tokens),
-        completion_tokens = value(usage.output_tokens),
-        total_tokens = value(usage.total_tokens),
+        prompt_tokens = prompt_tokens,
+        completion_tokens = completion_tokens,
+        total_tokens = total,
+        reasoning_tokens = reasoning_tokens(usage, prompt_tokens,
+          completion_tokens, total),
         raw = usage,
       }
     end
