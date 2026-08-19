@@ -8,14 +8,54 @@ Notable changes to ug-lua-llm. The format follows
 
 ## [0.3.0] - 2026-08-19
 
-Defects found by a team porting the library to another runtime, who read every
-module closely and re-derived its behaviour. Most were visible in the source
-rather than in a failing test, which is why they survived: the behaviour was
-wrong but nothing asserted otherwise.
+The largest correctness release so far. It began with defects found by a team
+porting the library to another runtime, who read every module closely and
+re-derived its behaviour; it grew because the techniques that exchange produced
+— testing provider parsing and normalization together rather than separately,
+transcribing real provider responses instead of writing plausible ones, and
+auditing for options no documentation had ever had to state the behaviour of —
+kept finding more.
 
-**Two of these broke a documented feature outright.** Groq's default model no
-longer exists, so any client that did not set one failed on its first call, and
-OpenAI tool calling never produced a final answer.
+Almost none were visible as a failing test. The behaviour was wrong and nothing
+asserted otherwise, and in several cases a passing test sat directly beside the
+defect, asserting what the code did rather than what the API required.
+
+**Six documented features did not work at all.** If you use any of these, this
+release is the one to take:
+
+- Groq's default model had been retired, so a client that set no model failed
+  on its first call.
+- OpenAI tool calling never produced a final answer.
+- Gemini tool calling never reached a second round.
+- Embeddings failed on Gemini and Mistral, and were documented for DeepSeek,
+  which serves no embeddings endpoint.
+- Streaming never streamed on current OpenAI models — the request was rejected
+  and a silent fallback returned a whole reply, reporting success.
+- `tool_choice` was ignored on Claude and Gemini, so a caller forbidding tool
+  use with `"none"` had tools called anyway.
+
+**Behaviour changes worth reading before upgrading:** there is no longer a
+default `temperature`; the bundled example tools are opt-in; a JSON schema
+combined with tools is refused on Claude; a library option nested inside
+`request_options` is refused rather than forwarded; and `Embeddings.new` raises
+for a provider that has no embeddings rather than returning a client that 404s.
+
+### Added
+
+- **`RateLimiter.acquire(provider, tokens)`** returns `{ ok, wait, limit,
+  waited }`, where `limit` names the bucket that bound the call. `configure`
+  gained `request_burst` and `token_burst`, defaulting to their rates, and `now`
+  and `sleep` hooks so pacing can be tested without waiting.
+- **Tool exchanges report what happened across all of them:** `tool_calls`
+  across every round, `tool_results` with `ok` and `error` per dispatch,
+  `tool_rounds`, `tool_pending` for calls a round cap stopped, and `messages`,
+  the conversation ready to continue. `on_tool` observes each dispatch.
+- **`ToolRegistry.register_standard_tools()`**, now that `get_weather` and
+  `calculator` are opt-in rather than registered at load time.
+- **`JSON.empty_array()`**, for building a payload that must carry an empty
+  array where an empty Lua table would otherwise encode as an object.
+- **Error codes `schema_tool_conflict` and `library_option_in_request_options`**
+  on `details.code`, for the two option combinations that are refused up front.
 
 ### Fixed
 
