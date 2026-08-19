@@ -260,6 +260,44 @@ function GeminiProvider:chat(messages, options)
   return self:_format_response(response.body)
 end
 
+-- Gemini spells tool choice as a nested toolConfig rather than OpenAI's
+-- `tool_choice`, so the OpenAI spelling is not merely rejected -- it is a field
+-- Gemini has never heard of. Passing it through unchanged meant a caller asking
+-- to force a tool, or to forbid one, silently got neither.
+local FUNCTION_CALLING_MODE = {
+  auto = "AUTO",
+  required = "ANY",
+  any = "ANY",
+  none = "NONE",
+}
+
+local function tool_config(choice)
+  if choice == nil then return nil end
+
+  if type(choice) == "string" then
+    local mode = FUNCTION_CALLING_MODE[choice:lower()]
+    if not mode then return nil end
+    return { functionCallingConfig = { mode = mode } }
+  end
+
+  if type(choice) == "table" then
+    -- Naming a tool is a demand for that one: OpenAI's
+    -- { type = "function", function = { name = ... } }, and Claude's
+    -- { type = "tool", name = ... }, both mean the same thing here.
+    local named = choice.name or (type(choice["function"]) == "table" and
+      choice["function"].name)
+    if named then
+      return { functionCallingConfig = {
+        mode = "ANY", allowedFunctionNames = { named } } }
+    end
+    local mode = type(choice.type) == "string" and
+      FUNCTION_CALLING_MODE[choice.type:lower()]
+    if mode then return { functionCallingConfig = { mode = mode } } end
+  end
+
+  return nil
+end
+
 function GeminiProvider:chat_with_tools(messages, tools, options)
   options = options or {}
   local model = options.model or self.config.model
@@ -291,6 +329,9 @@ function GeminiProvider:chat_with_tools(messages, tools, options)
   if system_instruction then
     payload.systemInstruction = system_instruction
   end
+
+  local config = tool_config(options.tool_choice)
+  if config and payload.toolConfig == nil then payload.toolConfig = config end
 
   local response, err, details = self.http:post(url, payload)
   if err or not response then

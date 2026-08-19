@@ -34,7 +34,8 @@ Defaults are conveniences, not recommendations for every workload. Pass
 ## Tools on the Chat Completions escape hatch
 
 OpenAI's current reasoning models do not accept function tools on Chat
-Completions at all, whoever sends the request:
+Completions at all, whoever sends the request. It is the whole `gpt-5.6` family,
+not one model:
 
 ```
 Function tools with reasoning_effort are not supported for gpt-5.6-terra

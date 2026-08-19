@@ -521,6 +521,10 @@ function ToolRegistry._prepare_tool_response_messages(messages, tool_results, pr
         type = "tool_result",
         tool_use_id = result.id,
         content = result.result_str,
+        -- Anthropic has a flag for this. Sending a failure as ordinary content
+        -- reads to the model like a call that succeeded and happened to return
+        -- an error-shaped object.
+        is_error = (result.ok == false) or nil,
       }
     end
     table.insert(updated_messages, { role = "user", content = result_blocks })

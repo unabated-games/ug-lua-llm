@@ -161,6 +161,23 @@ if response.structured_applied then
 end
 ```
 
+### Schemas and tools together
+
+The two do not always compose, and how they fail depends on where the provider
+puts the schema.
+
+On Claude there is no response-format field, so the schema *is* a forced tool
+call. Asking for both is a contradiction — the model cannot be compelled to
+call the schema tool and left free to choose among yours — and it is reported
+as a validation error with `code = "schema_tool_conflict"` rather than sent.
+Ask for the schema in a follow-up call once the tool exchange has finished.
+
+Elsewhere the schema travels beside the tools and the model chooses. A model
+that answers with a tool call has not produced a JSON document, so `parsed` is
+`nil` even where `structured_applied` is true — the schema was carried, and the
+model simply did something else with its turn. **Read `parsed` rather than
+`structured_applied` when tools are also in play.**
+
 `client:capabilities().structured_output` reports the carrier: `"responses"`,
 `"chat"`, `"schema"`, `"tool"`, or `false`.
 

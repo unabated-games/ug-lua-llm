@@ -278,3 +278,69 @@ describe("tool follow-up turns keep what the provider signed", function()
     assert.are.equal("call_252", messages[3].content[1].tool_use_id)
   end)
 end)
+
+describe("a failed tool is reported as failed, not as content", function()
+  local ToolRegistry = require("ug-lua-llm.tools.registry")
+
+  local function blocks(ok)
+    local messages = ToolRegistry._prepare_tool_response_messages(
+      { { role = "user", content = "hi" } },
+      { { id = "call_1", name = "t", result_str = '{"error":"no such city"}',
+          arguments = {}, ok = ok, error = (not ok) and "no such city" or nil } },
+      "claude", { content = {} }, false)
+    return messages[#messages].content[1]
+  end
+
+  it("flags a failure on Anthropic's tool_result block", function()
+    assert.is_true(blocks(false).is_error)
+  end)
+
+  it("leaves a successful result unflagged", function()
+    -- Present and false is not the same as absent; Anthropic treats the flag's
+    -- presence as meaningful, so a success must not carry it at all.
+    assert.is_nil(blocks(true).is_error)
+  end)
+end)
+
+describe("a schema carried as a tool cannot also carry the caller's tools", function()
+  local tools = { { name = "find_city", description = "d",
+    parameters = { type = "object", properties = {} } } }
+  local schema = { name = "answer", schema = { type = "object",
+    properties = { city = { type = "string" } } } }
+
+  it("reports the conflict on Claude instead of a missing tool", function()
+    -- Claude has no response-format field, so the schema is a forced tool call.
+    -- The provider used to reject it as "Tool 'answer' not found in provided
+    -- tools", which sends the caller hunting for a registration bug.
+    local client = LLM.new("claude", { api_key = "k" })
+    local result, err, details = client:chat_with_tools(
+      { { role = "user", content = "hi" } }, tools, { json_schema = schema })
+
+    assert.is_nil(result)
+    assert.is_truthy(err:find("forced tool call", 1, true))
+    assert.are.equal("schema_tool_conflict", details.code)
+  end)
+
+  it("leaves providers with a real response format alone", function()
+    -- OpenAI and Gemini carry the schema beside the tools, so the combination
+    -- is the model's choice to make rather than a contradiction.
+    local client = LLM.new("openai", { api_key = "k" })
+    client.provider.http.post = function()
+      return { status = 200, body = { status = "completed", output = {
+        { type = "message", content = { { type = "output_text", text = "{}" } } } } } }
+    end
+    local result = client:chat_with_tools(
+      { { role = "user", content = "hi" } }, tools, { json_schema = schema })
+    assert.is_table(result)
+  end)
+
+  it("still allows a schema with no tools", function()
+    local client = LLM.new("claude", { api_key = "k" })
+    client.provider.http.post = function()
+      return { status = 200, body = { content = { { type = "text", text = "hi" } },
+        stop_reason = "end_turn" } }
+    end
+    assert.is_table(client:chat({ { role = "user", content = "hi" } },
+      { json_schema = schema }))
+  end)
+end)

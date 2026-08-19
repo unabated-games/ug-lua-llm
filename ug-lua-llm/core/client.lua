@@ -110,6 +110,23 @@ function Client:chat_with_tools(messages, tools, options)
   options = options or {}
   local merged_options = Config.merge(self.config, options)
 
+  -- Where a provider has no response-format field, a schema is delivered *as* a
+  -- forced tool call. That cannot coexist with the caller's own tools: the
+  -- model can be compelled to call the schema tool or left free to choose among
+  -- theirs, not both. Say so here, rather than letting the provider reject a
+  -- tool name the caller never supplied.
+  if merged_options.json_schema ~= nil and tools and #tools > 0 then
+    local provider_name = (self.provider.config or {}).provider_name
+    if Structured.format(provider_name) == "tool" then
+      local message = provider_name ..
+        " carries a JSON schema as a forced tool call, so json_schema cannot be" ..
+        " combined with tools. Request the schema in a follow-up call, or read" ..
+        " the tool result directly."
+      return nil, message,
+        Error.validation(provider_name, message, "schema_tool_conflict")
+    end
+  end
+
   return self:_with_reasoning(merged_options, function(opts)
     return self.provider:chat_with_tools(messages, tools, opts)
   end)

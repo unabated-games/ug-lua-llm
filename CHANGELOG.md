@@ -106,6 +106,26 @@ OpenAI tool calling never produced a final answer.
 
 ### Changed
 
+- **Gemini ignored `tool_choice` entirely.** It is spelled as a nested
+  `toolConfig.functionCallingConfig` there rather than OpenAI's `tool_choice`,
+  and nothing translated it, so the field never reached the payload. A caller
+  asking to force a tool got a free choice, and — worse — one asking for
+  `"none"` to *forbid* tool use got tools called anyway, with no error to say
+  otherwise. `auto`, `required`/`any`, `none`, and naming a single tool now all
+  translate; a named tool becomes `allowedFunctionNames`.
+- **A failed tool was reported to Claude as an ordinary result.** Anthropic's
+  `tool_result` block has an `is_error` flag; without it a handler failure reads
+  to the model as a call that succeeded and happened to return an error-shaped
+  object. It is now set, and omitted rather than sent as `false` on success.
+- **A JSON schema and tools could not be combined on Claude, confusingly.**
+  Claude has no response-format field, so the schema is delivered as a forced
+  tool call, which the caller's own tools then contradict. The provider rejected
+  it as `Tool 'answer' not found in provided tools`, sending the caller after a
+  registration bug that did not exist. The conflict is now reported up front
+  with `code = "schema_tool_conflict"`. Where a provider has a real response
+  format the two still travel together, but a model that answers with a tool
+  call produces no JSON, so `parsed` is `nil` even when `structured_applied` is
+  true; the guidance is to read `parsed`.
 - **The rate limiter takes its clock as a parameter.** `now` and `sleep` are
   configurable, defaulting to the wall clock and a real sleep, which makes the
   waiting behaviour testable without waiting — the suite covers refill, burst,
