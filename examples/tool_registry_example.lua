@@ -11,6 +11,10 @@
 package.path = package.path .. ";../?.lua;./?.lua"
 
 local ToolRegistry = require "ug-lua-llm.tools.registry"
+
+-- The bundled example tools (get_weather, calculator) are opt-in, so a library
+-- consumer never inherits tools they did not define.
+ToolRegistry.register_standard_tools()
 local StreamHelpers = require "ug-lua-llm.utils.stream_helpers"
 local ClientFactory = require "examples.helpers.client_factory"
 local json = require "cjson"

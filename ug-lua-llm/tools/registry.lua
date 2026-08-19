@@ -36,6 +36,10 @@
 --   end)
 
 local json = require("ug-lua-llm.utils.json")
+-- Diagnostics go through the logger so a host can route or silence them.
+-- print() from inside a library writes to a stream the caller may be using for
+-- its own output, and cannot be turned off.
+local Logger = require("ug-lua-llm.utils.logger")
 
 local ToolRegistry = {
   _tools = {}, -- Storage for registered tools
@@ -277,55 +281,90 @@ end
 -- @param messages (table) The conversation messages so far
 -- @param callback (function) Callback for the final response
 -- @param options (table, optional) Options for the chat request
+-- Default ceiling on tool rounds. High enough for the multi-step shapes that
+-- occur in practice, low enough that a model looping on itself stops.
+local DEFAULT_MAX_TOOL_ROUNDS = 8
+
 function ToolRegistry.process_response(client, response, messages, callback, options)
   local StreamHelpers = require("ug-lua-llm.utils.stream_helpers")
   local provider_name = StreamHelpers.get_provider_type(client)
+  options = options or {}
+  local max_rounds = tonumber(options.max_tool_rounds) or DEFAULT_MAX_TOOL_ROUNDS
 
-  -- Parse tool calls into a normalized format
-  local tool_calls = ToolRegistry.process_tool_calls(client, response, provider_name)
+  local current_response = response
+  local current_messages = messages
+  local rounds = 0
 
-  -- No tool calls found
-  if #tool_calls == 0 then
-    callback(response)
-    return
-  end
+  -- A model may need a second tool once it sees the first result -- look up a
+  -- city, then look up its weather. Returning after one round meant the second
+  -- request was never made, so those conversations simply stopped.
+  while true do
+    local tool_calls = ToolRegistry.process_tool_calls(
+      client, current_response, provider_name)
 
-  -- Process each tool call
-  local tool_results = {}
-  for i, call in ipairs(tool_calls) do
-    -- Execute the tool with normalized arguments
-    local result, err = ToolRegistry.execute(call.name, call.arguments)
-    if err then
-      print("Warning: " .. err)
-      result = { error = err }
+    if #tool_calls == 0 then
+      callback(current_response)
+      return current_response
     end
 
-    -- Format the result
-    local result_str
-    if type(result) == "table" then
-      result_str = json.encode(result)
+    if rounds >= max_rounds then
+      -- Stop rather than loop forever, and say so instead of passing off a
+      -- response whose tool calls were never executed.
+      if type(current_response) == "table" then
+        current_response.tool_rounds_exhausted = true
+        current_response.tool_rounds = rounds
+      end
+      callback(current_response)
+      return current_response
+    end
+    rounds = rounds + 1
+
+    local tool_results = {}
+    for i, call in ipairs(tool_calls) do
+      local result, err = ToolRegistry.execute(call.name, call.arguments)
+      if err then
+        Logger.warn("Tool " .. tostring(call.name) .. " failed: " .. tostring(err))
+        result = { error = err }
+      end
+
+      local result_str
+      if type(result) == "table" then
+        result_str = json.encode(result)
+      else
+        result_str = tostring(result)
+      end
+
+      tool_results[i] = {
+        id = call.id,
+        name = call.name,
+        arguments = call.arguments,
+        result = result,
+        result_str = result_str
+      }
+    end
+
+    current_messages = ToolRegistry._prepare_tool_response_messages(
+      current_messages, tool_results, provider_name, current_response,
+      ToolRegistry._uses_responses_api(client, provider_name, options)
+    )
+
+    -- Re-offer the tools on the follow-up. Without them the model cannot ask
+    -- for a second one however much it needs to, so a multi-step task stops
+    -- after the first result and the model apologises instead of continuing.
+    local next_response, err, details
+    if options.tools then
+      next_response, err, details =
+        client:chat_with_tools(current_messages, options.tools, options)
     else
-      result_str = tostring(result)
+      next_response, err, details = client:chat(current_messages, options)
     end
-
-    -- Store results in a unified format
-    tool_results[i] = {
-      id = call.id,
-      name = call.name,
-      arguments = call.arguments,
-      result = result,
-      result_str = result_str
-    }
+    if not next_response then
+      -- Surface the failure rather than handing back a nil response.
+      callback(nil, err, details)
+      return nil, err, details
+    end
+    current_response = next_response
   end
-
-  -- Prepare messages for the follow-up based on provider
-  local updated_messages = ToolRegistry._prepare_tool_response_messages(
-    messages, tool_results, provider_name, response
-  )
-
-  -- Get the final response
-  local final_response = client:chat(updated_messages, options)
-  callback(final_response)
 end
 
 -- Process a response with tool calls and stream the final response
@@ -356,7 +395,7 @@ function ToolRegistry.process_response_streaming(client, response, messages, str
     -- Execute the tool with normalized arguments
     local result, err = ToolRegistry.execute(call.name, call.arguments)
     if err then
-      print("Warning: " .. err)
+      Logger.warn("Tool call failed: " .. tostring(err))
       result = { error = err }
     end
 
@@ -380,7 +419,8 @@ function ToolRegistry.process_response_streaming(client, response, messages, str
 
   -- Prepare messages for the follow-up based on provider
   local updated_messages = ToolRegistry._prepare_tool_response_messages(
-    messages, tool_results, provider_name, response
+    messages, tool_results, provider_name, response,
+    ToolRegistry._uses_responses_api(client, provider_name, options)
   )
 
   -- Use StreamHelpers to create a content-only callback
@@ -413,7 +453,16 @@ end
 -- @param tool_results (table) Results from tool execution
 -- @param provider_name (string) The provider name
 -- @return (table) Updated messages with tool responses
-function ToolRegistry._prepare_tool_response_messages(messages, tool_results, provider_name, assistant_response)
+-- True when this client talks to OpenAI's Responses API, which is the default
+-- and which takes a different shape for tool exchanges than Chat Completions.
+function ToolRegistry._uses_responses_api(client, provider_name, options)
+  if provider_name ~= "openai" then return false end
+  local config = client and client.provider and client.provider.config or {}
+  local api = (options and options.api) or config.api or "responses"
+  return api == "responses"
+end
+
+function ToolRegistry._prepare_tool_response_messages(messages, tool_results, provider_name, assistant_response, uses_responses)
   -- Create a copy of the original messages
   local updated_messages = {}
   for _, msg in ipairs(messages) do
@@ -458,9 +507,33 @@ function ToolRegistry._prepare_tool_response_messages(messages, tool_results, pr
   else
     -- OpenAI/compatible format
     -- Add the assistant message with tool calls
+    if uses_responses then
+      -- The Responses API takes tool exchanges as typed input items, not as an
+      -- assistant message carrying tool_calls. Sending the Chat Completions
+      -- shape was rejected outright ("Unknown parameter: input[N].tool_calls"),
+      -- so the follow-up request never succeeded and no final answer was ever
+      -- produced.
+      for _, result in ipairs(tool_results) do
+        table.insert(updated_messages, {
+          type = "function_call",
+          call_id = result.id,
+          name = result.name,
+          arguments = type(result.arguments) == "table"
+            and json.encode(result.arguments)
+            or tostring(result.arguments or "{}"),
+        })
+        table.insert(updated_messages, {
+          type = "function_call_output",
+          call_id = result.id,
+          output = result.result_str,
+        })
+      end
+      return updated_messages
+    end
+
     local assistant_msg = {
       role = "assistant",
-      content = nil,
+      content = "",
       tool_calls = {}
     }
 
@@ -661,14 +734,20 @@ ToolRegistry.standard_tools = {
   }
 }
 
--- Register standard tools
-for name, definition in pairs(ToolRegistry.standard_tools) do
-  ToolRegistry.register(name, definition)
+--- Register the bundled example tools and their collections.
+---
+--- These used to be registered when the module loaded, so every consumer got a
+--- `get_weather` and a `calculator` they never asked for, in a registry shared
+--- across the whole process. They are demonstrations, so opting in is now
+--- explicit; call this if you were relying on them being present.
+function ToolRegistry.register_standard_tools(overwrite)
+  for name, definition in pairs(ToolRegistry.standard_tools) do
+    ToolRegistry.register(name, definition, overwrite)
+  end
+  ToolRegistry.create_collection("standard", {"get_weather", "calculator"})
+  ToolRegistry.create_collection("weather", {"get_weather"})
+  ToolRegistry.create_collection("calculator", {"calculator"})
+  return true
 end
-
--- Create standard collections
-ToolRegistry.create_collection("standard", {"get_weather", "calculator"})
-ToolRegistry.create_collection("weather", {"get_weather"})
-ToolRegistry.create_collection("calculator", {"calculator"})
 
 return ToolRegistry

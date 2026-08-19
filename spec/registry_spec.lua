@@ -70,18 +70,24 @@ describe("ToolRegistry", function()
 
   describe("list", function()
     it("returns sorted list of tool names", function()
+      -- The bundled example tools are opt-in now, so a fresh registry starts
+      -- empty rather than carrying tools the consumer never defined.
+      ToolRegistry.register_standard_tools(true)
       local names = ToolRegistry.list()
-      -- Standard tools (calculator, get_weather) are auto-registered
       assert.truthy(#names >= 2)
-      -- Verify sorted
       for i = 2, #names do
         assert.truthy(names[i] >= names[i - 1])
       end
+    end)
+
+    it("starts empty until the example tools are asked for", function()
+      assert.is_false(ToolRegistry.exists("calculator"))
     end)
   end)
 
   describe("collection", function()
     it("creates a list of tool definitions", function()
+      ToolRegistry.register_standard_tools(true)
       local tools, err = ToolRegistry.collection({ "get_weather", "calculator" })
       assert.is_nil(err)
       assert.are.equal(2, #tools)

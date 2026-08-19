@@ -54,7 +54,10 @@ adapters.openai = {
       return nil, response_error(config, response)
     end
 
-    -- Normalize response
+    -- Normalize response. The API documents that results may arrive out of
+    -- order, so pair by the index it reports rather than by arrival: a caller
+    -- lining embeddings[i] up with inputs[i] would otherwise get the wrong
+    -- vector for the wrong text, with nothing to indicate it.
     local embeddings = {}
     if response.body and response.body.data then
       for _, item in ipairs(response.body.data) do
@@ -63,6 +66,9 @@ adapters.openai = {
           index = item.index,
         })
       end
+      table.sort(embeddings, function(a, b)
+        return (tonumber(a.index) or 0) < (tonumber(b.index) or 0)
+      end)
     end
 
     return {

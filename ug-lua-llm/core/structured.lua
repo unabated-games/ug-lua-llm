@@ -208,7 +208,12 @@ local REFUSAL_PATTERNS = {
 
 function Structured.refused(err, details)
   local status = details and details.status
-  if status and (status < 400 or status >= 500) then return false end
+  -- A provider refusing a field always says so with a 4xx. Without a status
+  -- this is a transport or timeout failure, and matching its message would let
+  -- an unrelated error be retried silently as though it were a refusal.
+  if type(status) ~= "number" or status < 400 or status >= 500 then
+    return false
+  end
   local text = tostring(err or ""):lower()
   for _, pattern in ipairs(REFUSAL_PATTERNS) do
     if text:find(pattern, 1, true) then return true end

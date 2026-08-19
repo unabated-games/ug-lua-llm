@@ -229,16 +229,23 @@ function OpenAIProvider:_build_chat_payload(messages, options)
     messages = messages,
   }
 
-  if is_reasoning_model(model) then
-    -- o-series models use max_completion_tokens instead of max_tokens
-    payload.max_completion_tokens = options.max_tokens or self.config.max_tokens
-    -- reasoning_effort: low, medium, high (default: medium)
-    if options.reasoning_effort then
-      payload.reasoning_effort = options.reasoning_effort
-    end
-    -- o-series models do not support temperature
-  else
-    payload.max_tokens = options.max_tokens or self.config.max_tokens
+  -- OpenAI replaced max_tokens with max_completion_tokens on Chat Completions,
+  -- and current models reject the old name outright. The previous rule guessed
+  -- from the model name (^o%d), which stopped matching the moment the naming
+  -- convention changed, so the default model could not be used at all.
+  payload.max_completion_tokens = options.max_tokens or self.config.max_tokens
+
+  if options.reasoning_effort then
+    payload.reasoning_effort = options.reasoning_effort
+  end
+
+  -- Only send a temperature the caller actually chose. Several current models
+  -- accept only their own default and reject any explicit value, so passing a
+  -- library default failed requests nobody asked to constrain.
+  local Config = require "ug-lua-llm.core.config"
+  if not is_reasoning_model(model) and
+      (Config.is_explicit(options, "temperature") or
+       Config.is_explicit(self.config, "temperature")) then
     payload.temperature = options.temperature or self.config.temperature
   end
 

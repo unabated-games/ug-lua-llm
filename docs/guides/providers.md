@@ -9,7 +9,7 @@ require an API key; Ollama and custom endpoints may run without one.
 | `claude` | Anthropic | `claude-sonnet-4-6` | `ANTHROPIC_API_KEY` |
 | `gemini` | Google | `gemini-3.6-flash` | `GEMINI_API_KEY` |
 | `grok` | xAI | `grok-4.3` | `GROK_API_KEY` |
-| `groq` | Groq | `llama-3.3-70b-versatile` | `GROQ_API_KEY` |
+| `groq` | Groq | `openai/gpt-oss-20b` | `GROQ_API_KEY` |
 | `openrouter` | OpenRouter | `~openai/gpt-latest` | `OPENROUTER_API_KEY` |
 | `ollama` | Local Ollama | `llama3.2` | none |
 | `deepseek` | DeepSeek | `deepseek-v4-flash` | `DEEPSEEK_API_KEY` |

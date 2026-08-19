@@ -17,7 +17,9 @@ function OpenRouterProvider.new(config)
     provider.http.headers["HTTP-Referer"] = config.http_referer
   end
   if config.x_title then
-    provider.http.headers["X-OpenRouter-Title"] = config.x_title
+    -- OpenRouter documents this header as X-Title; the longer name was
+    -- simply ignored, so attribution never took effect.
+    provider.http.headers["X-Title"] = config.x_title
   end
 
   setmetatable(provider, { __index = OpenRouterProvider })

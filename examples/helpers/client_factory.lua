@@ -20,7 +20,7 @@ local PROVIDER_CONFIGS = {
   },
   groq = {
     env_key = "GROQ_API_KEY",
-    default_model = "llama-3.3-70b-versatile",
+    default_model = "openai/gpt-oss-20b",
     description = "Groq (Llama, Mixtral models)"
   },
   grok = {
