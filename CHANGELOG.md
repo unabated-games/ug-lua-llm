@@ -153,6 +153,17 @@ for a provider that has no embeddings rather than returning a client that 404s.
   an object, but got a string instead"*. A normalized level is now translated
   there as it is everywhere else, and a caller who supplies the provider's own
   object still has it passed through untouched.
+- **`complete` and `stream_complete` sent current models to a dead endpoint.**
+  The routing kept an allow-list of chat-only models, written when
+  `/v1/completions` still served most of them, and sent anything absent from it
+  to the legacy endpoint — so every model released since failed with *"This is
+  a chat model and not supported in the v1/completions endpoint"*. The list was
+  correct when written and could rot in only one direction. It is inverted now:
+  an unknown model goes to the endpoint that serves everything, and only the
+  handful the legacy endpoint still serves take the other branch. Alongside
+  that, `stream_complete` deltas now carry `content` and `text`, which every
+  streaming callback in the library is documented to expose and this one did
+  not.
 - **A JSON schema written the obvious way was rejected, and the reason was
   hidden.** OpenAI's strict mode requires `additionalProperties: false` on every
   object node, and the caller's schema was passed through unchanged — so a

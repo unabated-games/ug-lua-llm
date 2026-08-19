@@ -810,3 +810,54 @@ describe("structured_applied cannot claim a schema that was never sent", functio
     assert.is_false(result.structured_applied)
   end)
 end)
+
+describe("completion routing follows what the endpoints actually serve", function()
+  -- The rule was an allow-list of chat-only models, written when /completions
+  -- served most of them. A model absent from it went to the legacy endpoint, so
+  -- everything released since failed with "This is a chat model and not
+  -- supported in the v1/completions endpoint". Correct when written, and able
+  -- to rot in only one direction.
+  local function endpoint_for(model, method)
+    local client = LLM.new("openai",
+      { api_key = "k", api = "chat_completions", model = model, max_tokens = 32 })
+    local seen
+    client.provider.http.post = function(_, url)
+      seen = url
+      return { status = 200, body = { choices = { {
+        message = { content = "ok" }, text = "ok", finish_reason = "stop" } } } }
+    end
+    method(client)
+    return seen
+  end
+
+  local complete = function(c) c:complete("hi") end
+
+  it("sends an unknown model to the endpoint that serves everything", function()
+    assert.is_truthy(endpoint_for("gpt-5.6-terra", complete):find("/chat/completions"))
+    assert.is_truthy(endpoint_for("a-model-released-tomorrow", complete)
+      :find("/chat/completions"))
+  end)
+
+  it("still uses the legacy endpoint for what it serves", function()
+    local url = endpoint_for("gpt-3.5-turbo-instruct", complete)
+    assert.is_truthy(url:find("/completions"))
+    assert.is_nil(url:find("/chat/completions"))
+  end)
+
+  it("gives stream_complete deltas the documented fields", function()
+    -- Every streaming callback is documented to expose content and text; this
+    -- one emitted only the completion-shaped `choices` entry.
+    local client = LLM.new("openai",
+      { api_key = "k", api = "chat_completions", model = "gpt-4o-mini" })
+    local seen
+    client.provider.stream_chat = function(_, _, callback)
+      callback({ choices = { { index = 0, delta = { content = "ok" },
+        finish_reason = nil } } }, {})
+      return { text = "ok" }
+    end
+    client:stream_complete("hi", function(delta) seen = delta end)
+    assert.are.equal("ok", seen.content)
+    assert.are.equal("ok", seen.text)
+    assert.are.equal("ok", seen.choices[1].text)
+  end)
+end)
