@@ -152,29 +152,29 @@ function OpenAIProvider:list_models(options)
   end, self.config.base_url .. "/models", options)
 end
 
--- List of models that only support the chat endpoint
-local CHAT_ONLY_MODELS = {
-  ["gpt-4"] = true,
-  ["gpt-4-turbo"] = true,
-  ["gpt-4o"] = true,
-  ["gpt-4o-mini"] = true,
-  ["gpt-3.5-turbo"] = true
+-- Which models the legacy /completions endpoint still serves. It is the short
+-- list now, and it stopped growing: everything current is a chat model.
+--
+-- This used to be the other way round -- an allow-list of chat-only models,
+-- written when /completions served most of them. A model absent from that list
+-- was sent to the legacy endpoint, so every model released since failed with
+-- "This is a chat model and not supported in the v1/completions endpoint". The
+-- list was correct when written and could only rot in one direction, which is
+-- the same defect as guessing a reasoning model from its name.
+--
+-- Inverted, an unknown model now goes to the endpoint that serves everything.
+local COMPLETION_ONLY_MODELS = {
+  ["gpt-3.5-turbo-instruct"] = true,
+  ["davinci-002"] = true,
+  ["babbage-002"] = true,
 }
 
--- Check if a model only supports chat API
-local function is_chat_only_model(model)
-  -- Check for exact matches
-  if CHAT_ONLY_MODELS[model] then
-    return true
+local function uses_legacy_completions(model)
+  if type(model) ~= "string" then return false end
+  if COMPLETION_ONLY_MODELS[model] then return true end
+  for prefix in pairs(COMPLETION_ONLY_MODELS) do
+    if model:find("^" .. prefix .. "%-") then return true end
   end
-
-  -- Check for prefix matches (e.g., gpt-4-0125-preview)
-  for prefix, _ in pairs(CHAT_ONLY_MODELS) do
-    if model:find("^" .. prefix .. "%-") then
-      return true
-    end
-  end
-
   return false
 end
 
@@ -186,8 +186,9 @@ function OpenAIProvider:complete(prompt, options)
   end
   local model = options.model or self.config.model
 
-  -- Check if the model only supports the chat completion API
-  if is_chat_only_model(model) then
+  -- Chat is the default route; only a model the legacy endpoint still serves
+  -- takes the other branch.
+  if not uses_legacy_completions(model) then
     -- Convert prompt to chat format and use chat endpoint instead
     local chat_messages = {
       { role = "user", content = prompt }
@@ -255,7 +256,16 @@ function OpenAIProvider:_build_chat_payload(messages, options)
   -- 400 naming the parameter beats a silent drop that looks like it applied.
   payload.temperature = options.temperature or self.config.temperature
 
-  return payload
+  -- Structured output on this endpoint travels as response_format. Without
+  -- this the schema was dropped on the way to the wire while the request still
+  -- succeeded, so the caller was told the schema applied and got prose.
+  if options.response_format then
+    payload.response_format = options.response_format
+  end
+
+  if options.tool_choice then payload.tool_choice = options.tool_choice end
+
+  return Options.payload(payload, options)
 end
 
 -- Send a chat message
@@ -322,8 +332,9 @@ function OpenAIProvider:stream_complete(prompt, callback, options)
   options = options or {}
   local model = options.model or self.config.model
 
-  -- Check if the model only supports the chat completion API
-  if is_chat_only_model(model) then
+  -- Same routing as complete(): chat is the default, and only a model the
+  -- legacy endpoint still serves takes the other branch.
+  if not uses_legacy_completions(model) then
     -- Convert prompt to chat format and use stream_chat method instead
     local chat_messages = {
       { role = "user", content = prompt }
@@ -332,14 +343,21 @@ function OpenAIProvider:stream_complete(prompt, callback, options)
     local response = self:stream_chat(chat_messages, function(delta, full)
       -- Convert chat format to completion format
       if delta.choices and delta.choices[1] and delta.choices[1].delta and delta.choices[1].delta.content then
+        -- Completion-shaped for callers of this method, but `content` and
+        -- `text` travel too: every streaming callback in the library is
+        -- documented to expose them, and this one exposed neither.
+        local content = delta.choices[1].delta.content
         local text_delta = {
+          content = content,
+          text = content,
           choices = {
             {
-              text = delta.choices[1].delta.content,
+              text = content,
               index = delta.choices[1].index,
               finish_reason = delta.choices[1].finish_reason
             }
           },
+          finish_reason = delta.choices[1].finish_reason,
           delta = true
         }
 

@@ -8,14 +8,54 @@ Notable changes to ug-lua-llm. The format follows
 
 ## [0.3.0] - 2026-08-19
 
-Defects found by a team porting the library to another runtime, who read every
-module closely and re-derived its behaviour. Most were visible in the source
-rather than in a failing test, which is why they survived: the behaviour was
-wrong but nothing asserted otherwise.
+The largest correctness release so far. It began with defects found by a team
+porting the library to another runtime, who read every module closely and
+re-derived its behaviour; it grew because the techniques that exchange produced
+— testing provider parsing and normalization together rather than separately,
+transcribing real provider responses instead of writing plausible ones, and
+auditing for options no documentation had ever had to state the behaviour of —
+kept finding more.
 
-**Two of these broke a documented feature outright.** Groq's default model no
-longer exists, so any client that did not set one failed on its first call, and
-OpenAI tool calling never produced a final answer.
+Almost none were visible as a failing test. The behaviour was wrong and nothing
+asserted otherwise, and in several cases a passing test sat directly beside the
+defect, asserting what the code did rather than what the API required.
+
+**Six documented features did not work at all.** If you use any of these, this
+release is the one to take:
+
+- Groq's default model had been retired, so a client that set no model failed
+  on its first call.
+- OpenAI tool calling never produced a final answer.
+- Gemini tool calling never reached a second round.
+- Embeddings failed on Gemini and Mistral, and were documented for DeepSeek,
+  which serves no embeddings endpoint.
+- Streaming never streamed on current OpenAI models — the request was rejected
+  and a silent fallback returned a whole reply, reporting success.
+- `tool_choice` was ignored on Claude and Gemini, so a caller forbidding tool
+  use with `"none"` had tools called anyway.
+
+**Behaviour changes worth reading before upgrading:** there is no longer a
+default `temperature`; the bundled example tools are opt-in; a JSON schema
+combined with tools is refused on Claude; a library option nested inside
+`request_options` is refused rather than forwarded; and `Embeddings.new` raises
+for a provider that has no embeddings rather than returning a client that 404s.
+
+### Added
+
+- **`RateLimiter.acquire(provider, tokens)`** returns `{ ok, wait, limit,
+  waited }`, where `limit` names the bucket that bound the call. `configure`
+  gained `request_burst` and `token_burst`, defaulting to their rates, and `now`
+  and `sleep` hooks so pacing can be tested without waiting.
+- **Tool exchanges report what happened across all of them:** `tool_calls`
+  across every round, `tool_results` with `ok` and `error` per dispatch,
+  `tool_rounds`, `tool_pending` for calls a round cap stopped, and `messages`,
+  the conversation ready to continue. `on_tool` observes each dispatch.
+- **`ToolRegistry.register_standard_tools()`**, now that `get_weather` and
+  `calculator` are opt-in rather than registered at load time.
+- **`JSON.empty_array()`**, for building a payload that must carry an empty
+  array where an empty Lua table would otherwise encode as an object.
+- **Error codes `schema_tool_conflict` and `library_option_in_request_options`**
+  on `details.code`, for the two option combinations that are refused up front.
 
 ### Fixed
 
@@ -113,6 +153,44 @@ OpenAI tool calling never produced a final answer.
   an object, but got a string instead"*. A normalized level is now translated
   there as it is everywhere else, and a caller who supplies the provider's own
   object still has it passed through untouched.
+- **`complete` and `stream_complete` sent current models to a dead endpoint.**
+  The routing kept an allow-list of chat-only models, written when
+  `/v1/completions` still served most of them, and sent anything absent from it
+  to the legacy endpoint — so every model released since failed with *"This is
+  a chat model and not supported in the v1/completions endpoint"*. The list was
+  correct when written and could rot in only one direction. It is inverted now:
+  an unknown model goes to the endpoint that serves everything, and only the
+  handful the legacy endpoint still serves take the other branch. Alongside
+  that, `stream_complete` deltas now carry `content` and `text`, which every
+  streaming callback in the library is documented to expose and this one did
+  not.
+- **A JSON schema written the obvious way was rejected, and the reason was
+  hidden.** OpenAI's strict mode requires `additionalProperties: false` on every
+  object node, and the caller's schema was passed through unchanged — so a
+  schema with none, which is what anyone writes, failed the strict attempt with
+  `'additionalProperties' is required to be supplied and to be false`. The
+  ladder then degraded to plain JSON mode as designed, and *that* rung failed
+  for an unrelated reason, so the error the caller finally saw named a rung they
+  never asked for. Every object node is sealed now, including objects inside
+  `items`, which a one-level pass misses and which is exactly the shape of a
+  list of records. An explicit `additionalProperties = true` is left alone.
+- **`structured_applied` was derived from the attempt index alone.** That reads
+  correctly while every provider has a carrier, and stops the moment one does
+  not: a provider absent from the format map has a single attempt — the
+  unchanged one — so the first rung is a request carrying no schema, and the
+  caller was told their schema had been honoured by a request that never
+  contained it. It is now derived from whether a carrier resolved at all, the
+  same rule `reasoning_applied` already used. Both flags are answered by their
+  own module — `Reasoning.applied` and `Structured.applied` — rather than
+  computed at the call site, because two expressions of one fact are how the
+  first came to be fixed without the second. Tests cover both maps for every
+  provider the library can construct.
+- **Structured output did nothing on the Chat Completions escape hatch, and
+  said it had worked.** The schema was carried as `text.format`, which only the
+  Responses API reads, and the Chat Completions payload builder did not carry
+  `response_format` at all — so the schema never reached the wire, the request
+  succeeded without it, and `structured_applied` reported `true`. The carrier
+  now follows the API in use, and the payload carries what it is given.
 - **Streaming replies did not satisfy the normalized contract on Claude.** The
   accumulator built Anthropic's own shape and returned it directly, so a
   streamed reply carried `stop_reason` rather than `finish_reason`, no

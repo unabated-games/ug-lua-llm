@@ -42,6 +42,37 @@ end
 
 --- Validate and normalize the caller's `json_schema` option.
 --- Accepts a bare JSON Schema, or { name, schema, strict, description }.
+-- OpenAI's strict mode requires additionalProperties: false on *every* object
+-- node, not just the root, and rejects a schema without it. Passing a caller's
+-- schema through unchanged meant the obvious schema -- no additionalProperties,
+-- because why would you write one -- failed the strict rung, and the ladder
+-- then degraded to plain JSON mode, so the error the caller finally saw named
+-- a rung they never asked for.
+--
+-- Objects nested inside `items` are sealed too: a list of records is exactly
+-- the shape a one-level pass misses. An explicit `additionalProperties = true`
+-- is left alone, because someone who wrote that meant it.
+local function seal(node)
+  if type(node) ~= "table" then return node end
+
+  local sealed = {}
+  for key, value in pairs(node) do
+    if type(value) == "table" then
+      sealed[key] = seal(value)
+    else
+      sealed[key] = value
+    end
+  end
+
+  if sealed.type == "object" or type(sealed.properties) == "table" then
+    if sealed.additionalProperties == nil then
+      sealed.additionalProperties = false
+    end
+  end
+
+  return sealed
+end
+
 function Structured.spec(value)
   if value == nil then return nil end
   if type(value) ~= "table" then
@@ -54,12 +85,13 @@ function Structured.spec(value)
   if schema.type == nil and schema.properties == nil and schema["$ref"] == nil then
     return nil, "json_schema must look like a JSON Schema"
   end
+  -- Strict is the point of asking for a schema, so it is the default.
+  local strict = value.strict ~= false
   return {
     name = value.name or DEFAULT_NAME,
     description = value.description,
-    schema = schema,
-    -- Strict is the point of asking for a schema, so it is the default.
-    strict = value.strict ~= false,
+    schema = strict and seal(schema) or schema,
+    strict = strict,
   }
 end
 
@@ -109,6 +141,13 @@ end
 --- that refuses structured output still answers.
 function Structured.attempts(provider_name, spec, options)
   local format = Structured.format(provider_name)
+  -- The Responses carrier writes text.format, which a Chat Completions payload
+  -- never reads. A caller on the escape hatch had the schema dropped entirely
+  -- and was told it applied, because the request succeeded -- it just carried
+  -- nothing. Follow the API actually in use.
+  if format == "responses" and options and options.api == "chat_completions" then
+    format = "chat"
+  end
   local unchanged = function() return copy(options) end
   if not spec or format == false then return { unchanged } end
 
@@ -196,6 +235,13 @@ function Structured.attempts(provider_name, spec, options)
   end
 
   return { unchanged }
+end
+
+--- Whether an attempt actually carried the schema, for the same reason as
+--- Reasoning.applied: a provider with no carrier has one attempt that sends no
+--- schema, and a bare index test calls that compliance.
+function Structured.applied(provider_name, index)
+  return Structured.format(provider_name) ~= false and index == 1
 end
 
 -- Signatures of a model refusing structured output rather than failing for an

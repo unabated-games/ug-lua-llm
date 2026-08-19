@@ -671,3 +671,193 @@ describe("a tool loop run against a streamed reply", function()
     assert.are.equal("tool_use", sent[2].content[2].type)
   end)
 end)
+
+describe("a schema the caller would actually write", function()
+  local Structured = require("ug-lua-llm.core.structured")
+
+  it("seals every object node, not just the root", function()
+    -- OpenAI strict mode requires additionalProperties: false on every object,
+    -- and rejects the schema without it. Objects inside `items` are the shape a
+    -- one-level pass misses, and a list of records is exactly what a caller has.
+    local spec = Structured.spec({ name = "cities", schema = {
+      type = "object",
+      properties = {
+        cities = { type = "array", items = { type = "object",
+          properties = { name = { type = "string" } } } },
+      },
+    } })
+    assert.is_false(spec.schema.additionalProperties)
+    assert.is_false(spec.schema.properties.cities.items.additionalProperties)
+  end)
+
+  it("leaves an explicit additionalProperties alone", function()
+    -- Someone who wrote `true` meant it; reversing that silently is the thing
+    -- this library keeps refusing to do.
+    local spec = Structured.spec({ schema = {
+      type = "object", additionalProperties = true, properties = {} } })
+    assert.is_true(spec.schema.additionalProperties)
+  end)
+
+  it("does not seal when strict is declined", function()
+    local spec = Structured.spec({ strict = false, schema = {
+      type = "object", properties = { a = { type = "string" } } } })
+    assert.is_nil(spec.schema.additionalProperties)
+  end)
+
+  it("does not mutate the caller's own table", function()
+    local schema = { type = "object", properties = {} }
+    Structured.spec({ schema = schema })
+    assert.is_nil(schema.additionalProperties)
+  end)
+
+  it("follows the API in use rather than the provider's default", function()
+    -- The Responses carrier writes text.format, which a Chat Completions
+    -- payload never reads, so the schema was dropped and reported as applied.
+    local spec = Structured.spec({ name = "answer",
+      schema = { type = "object", properties = {} } })
+    local attempts = Structured.attempts("openai", spec,
+      { api = "chat_completions" })
+    local built = attempts[1]()
+    assert.is_table(built.response_format)
+    assert.are.equal("json_schema", built.response_format.type)
+    assert.is_nil(built.text)
+  end)
+
+  it("still uses the Responses carrier by default", function()
+    local spec = Structured.spec({ name = "answer",
+      schema = { type = "object", properties = {} } })
+    local built = Structured.attempts("openai", spec, {})[1]()
+    assert.are.equal("json_schema", built.text.format.type)
+  end)
+end)
+
+describe("the Chat Completions payload carries what it is given", function()
+  it("sends response_format so a schema reaches the wire", function()
+    local client = LLM.new("openai",
+      { api_key = "k", api = "chat_completions", max_tokens = 64 })
+    local sent
+    client.provider.http.post = function(_, _, payload)
+      sent = payload
+      return { status = 200, body = { choices = { {
+        message = { content = '{"city":"Paris"}' }, finish_reason = "stop" } } } }
+    end
+    local result = client:chat({ { role = "user", content = "hi" } },
+      { json_schema = { name = "answer", schema = { type = "object",
+        properties = { city = { type = "string" } } } } })
+
+    assert.is_table(sent.response_format)
+    assert.are.equal("Paris", result.parsed.city)
+    assert.is_true(result.structured_applied)
+  end)
+end)
+
+describe("structured_applied cannot claim a schema that was never sent", function()
+  local Structured = require("ug-lua-llm.core.structured")
+
+  it("covers every provider with a reasoning control too", function()
+    -- The sibling map. Both flags answer the same question about different
+    -- ladders, so a completeness test for one without the other is the same
+    -- omission that produced the defect.
+    local Reasoning = require("ug-lua-llm.core.reasoning")
+    for _, provider in ipairs({ "openai", "claude", "gemini", "grok", "groq",
+        "openrouter", "ollama", "deepseek", "mistral", "openai-compatible" }) do
+      assert.is_truthy(Reasoning.control(provider),
+        provider .. " has no reasoning control entry")
+    end
+  end)
+
+  it("asks each module rather than testing an index at the call site", function()
+    local Reasoning = require("ug-lua-llm.core.reasoning")
+    -- A provider with no carrier or control never complied, whatever rung ran.
+    assert.is_false(Structured.applied("nosuchprovider", 1))
+    assert.is_false(Reasoning.applied("nosuchprovider", 1))
+    assert.is_true(Structured.applied("openai", 1))
+    assert.is_true(Reasoning.applied("openai", 1))
+    -- And a later rung is a degradation on both.
+    assert.is_false(Structured.applied("openai", 2))
+    assert.is_false(Reasoning.applied("openai", 2))
+  end)
+
+  it("covers every provider the library can construct", function()
+    -- The flag was derived from the rung index alone, which reads correctly
+    -- while every provider is in the format map. A provider missing from it has
+    -- one attempt -- the unchanged one -- so rung 1 carries no schema, and the
+    -- caller is told their schema was honoured by a request without it. This
+    -- keeps the map's completeness from being the only thing holding that off.
+    for _, provider in ipairs({ "openai", "claude", "gemini", "grok", "groq",
+        "openrouter", "ollama", "deepseek", "mistral", "openai-compatible" }) do
+      assert.is_truthy(Structured.format(provider),
+        provider .. " has no structured-output carrier")
+    end
+  end)
+
+  it("reports false when no carrier resolved", function()
+    local real = Structured.format
+    Structured.format = function(name)
+      if name == "openai" then return false end
+      return real(name)
+    end
+
+    local client = LLM.new("openai", { api_key = "k", api = "chat_completions" })
+    client.provider.http.post = function()
+      return { status = 200, body = { choices = { {
+        message = { content = "hi" }, finish_reason = "stop" } } } }
+    end
+    local result = client:chat({ { role = "user", content = "hi" } },
+      { json_schema = { name = "a", schema = { type = "object", properties = {} } } })
+
+    Structured.format = real
+    assert.is_false(result.structured_applied)
+  end)
+end)
+
+describe("completion routing follows what the endpoints actually serve", function()
+  -- The rule was an allow-list of chat-only models, written when /completions
+  -- served most of them. A model absent from it went to the legacy endpoint, so
+  -- everything released since failed with "This is a chat model and not
+  -- supported in the v1/completions endpoint". Correct when written, and able
+  -- to rot in only one direction.
+  local function endpoint_for(model, method)
+    local client = LLM.new("openai",
+      { api_key = "k", api = "chat_completions", model = model, max_tokens = 32 })
+    local seen
+    client.provider.http.post = function(_, url)
+      seen = url
+      return { status = 200, body = { choices = { {
+        message = { content = "ok" }, text = "ok", finish_reason = "stop" } } } }
+    end
+    method(client)
+    return seen
+  end
+
+  local complete = function(c) c:complete("hi") end
+
+  it("sends an unknown model to the endpoint that serves everything", function()
+    assert.is_truthy(endpoint_for("gpt-5.6-terra", complete):find("/chat/completions"))
+    assert.is_truthy(endpoint_for("a-model-released-tomorrow", complete)
+      :find("/chat/completions"))
+  end)
+
+  it("still uses the legacy endpoint for what it serves", function()
+    local url = endpoint_for("gpt-3.5-turbo-instruct", complete)
+    assert.is_truthy(url:find("/completions"))
+    assert.is_nil(url:find("/chat/completions"))
+  end)
+
+  it("gives stream_complete deltas the documented fields", function()
+    -- Every streaming callback is documented to expose content and text; this
+    -- one emitted only the completion-shaped `choices` entry.
+    local client = LLM.new("openai",
+      { api_key = "k", api = "chat_completions", model = "gpt-4o-mini" })
+    local seen
+    client.provider.stream_chat = function(_, _, callback)
+      callback({ choices = { { index = 0, delta = { content = "ok" },
+        finish_reason = nil } } }, {})
+      return { text = "ok" }
+    end
+    client:stream_complete("hi", function(delta) seen = delta end)
+    assert.are.equal("ok", seen.content)
+    assert.are.equal("ok", seen.text)
+    assert.are.equal("ok", seen.choices[1].text)
+  end)
+end)
