@@ -671,3 +671,82 @@ describe("a tool loop run against a streamed reply", function()
     assert.are.equal("tool_use", sent[2].content[2].type)
   end)
 end)
+
+describe("a schema the caller would actually write", function()
+  local Structured = require("ug-lua-llm.core.structured")
+
+  it("seals every object node, not just the root", function()
+    -- OpenAI strict mode requires additionalProperties: false on every object,
+    -- and rejects the schema without it. Objects inside `items` are the shape a
+    -- one-level pass misses, and a list of records is exactly what a caller has.
+    local spec = Structured.spec({ name = "cities", schema = {
+      type = "object",
+      properties = {
+        cities = { type = "array", items = { type = "object",
+          properties = { name = { type = "string" } } } },
+      },
+    } })
+    assert.is_false(spec.schema.additionalProperties)
+    assert.is_false(spec.schema.properties.cities.items.additionalProperties)
+  end)
+
+  it("leaves an explicit additionalProperties alone", function()
+    -- Someone who wrote `true` meant it; reversing that silently is the thing
+    -- this library keeps refusing to do.
+    local spec = Structured.spec({ schema = {
+      type = "object", additionalProperties = true, properties = {} } })
+    assert.is_true(spec.schema.additionalProperties)
+  end)
+
+  it("does not seal when strict is declined", function()
+    local spec = Structured.spec({ strict = false, schema = {
+      type = "object", properties = { a = { type = "string" } } } })
+    assert.is_nil(spec.schema.additionalProperties)
+  end)
+
+  it("does not mutate the caller's own table", function()
+    local schema = { type = "object", properties = {} }
+    Structured.spec({ schema = schema })
+    assert.is_nil(schema.additionalProperties)
+  end)
+
+  it("follows the API in use rather than the provider's default", function()
+    -- The Responses carrier writes text.format, which a Chat Completions
+    -- payload never reads, so the schema was dropped and reported as applied.
+    local spec = Structured.spec({ name = "answer",
+      schema = { type = "object", properties = {} } })
+    local attempts = Structured.attempts("openai", spec,
+      { api = "chat_completions" })
+    local built = attempts[1]()
+    assert.is_table(built.response_format)
+    assert.are.equal("json_schema", built.response_format.type)
+    assert.is_nil(built.text)
+  end)
+
+  it("still uses the Responses carrier by default", function()
+    local spec = Structured.spec({ name = "answer",
+      schema = { type = "object", properties = {} } })
+    local built = Structured.attempts("openai", spec, {})[1]()
+    assert.are.equal("json_schema", built.text.format.type)
+  end)
+end)
+
+describe("the Chat Completions payload carries what it is given", function()
+  it("sends response_format so a schema reaches the wire", function()
+    local client = LLM.new("openai",
+      { api_key = "k", api = "chat_completions", max_tokens = 64 })
+    local sent
+    client.provider.http.post = function(_, _, payload)
+      sent = payload
+      return { status = 200, body = { choices = { {
+        message = { content = '{"city":"Paris"}' }, finish_reason = "stop" } } } }
+    end
+    local result = client:chat({ { role = "user", content = "hi" } },
+      { json_schema = { name = "answer", schema = { type = "object",
+        properties = { city = { type = "string" } } } } })
+
+    assert.is_table(sent.response_format)
+    assert.are.equal("Paris", result.parsed.city)
+    assert.is_true(result.structured_applied)
+  end)
+end)

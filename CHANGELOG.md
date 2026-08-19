@@ -153,6 +153,22 @@ for a provider that has no embeddings rather than returning a client that 404s.
   an object, but got a string instead"*. A normalized level is now translated
   there as it is everywhere else, and a caller who supplies the provider's own
   object still has it passed through untouched.
+- **A JSON schema written the obvious way was rejected, and the reason was
+  hidden.** OpenAI's strict mode requires `additionalProperties: false` on every
+  object node, and the caller's schema was passed through unchanged — so a
+  schema with none, which is what anyone writes, failed the strict attempt with
+  `'additionalProperties' is required to be supplied and to be false`. The
+  ladder then degraded to plain JSON mode as designed, and *that* rung failed
+  for an unrelated reason, so the error the caller finally saw named a rung they
+  never asked for. Every object node is sealed now, including objects inside
+  `items`, which a one-level pass misses and which is exactly the shape of a
+  list of records. An explicit `additionalProperties = true` is left alone.
+- **Structured output did nothing on the Chat Completions escape hatch, and
+  said it had worked.** The schema was carried as `text.format`, which only the
+  Responses API reads, and the Chat Completions payload builder did not carry
+  `response_format` at all — so the schema never reached the wire, the request
+  succeeded without it, and `structured_applied` reported `true`. The carrier
+  now follows the API in use, and the payload carries what it is given.
 - **Streaming replies did not satisfy the normalized contract on Claude.** The
   accumulator built Anthropic's own shape and returned it directly, so a
   streamed reply carried `stop_reason` rather than `finish_reason`, no

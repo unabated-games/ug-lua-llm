@@ -255,7 +255,16 @@ function OpenAIProvider:_build_chat_payload(messages, options)
   -- 400 naming the parameter beats a silent drop that looks like it applied.
   payload.temperature = options.temperature or self.config.temperature
 
-  return payload
+  -- Structured output on this endpoint travels as response_format. Without
+  -- this the schema was dropped on the way to the wire while the request still
+  -- succeeded, so the caller was told the schema applied and got prose.
+  if options.response_format then
+    payload.response_format = options.response_format
+  end
+
+  if options.tool_choice then payload.tool_choice = options.tool_choice end
+
+  return Options.payload(payload, options)
 end
 
 -- Send a chat message
