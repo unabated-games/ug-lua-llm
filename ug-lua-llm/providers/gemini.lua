@@ -63,6 +63,22 @@ function GeminiProvider:_format_contents(messages)
   return contents, system_instruction
 end
 
+-- Gemini reports usage under its own names. Rebuilding the table from three of
+-- them dropped the rest -- including thoughtsTokenCount, the explicit reasoning
+-- count Response.normalize looks for -- so the cost of thinking had to be
+-- re-derived from the gap between the total and its parts, and was simply
+-- absent whenever the total did not include it. Carry every field through and
+-- add the normalized names beside them.
+local function normalize_usage(metadata)
+  if type(metadata) ~= "table" then return nil end
+  local usage = {}
+  for key, value in pairs(metadata) do usage[key] = value end
+  usage.prompt_tokens = metadata.promptTokenCount
+  usage.completion_tokens = metadata.candidatesTokenCount
+  usage.total_tokens = metadata.totalTokenCount
+  return usage
+end
+
 -- Convert Gemini response to OpenAI-like format for consistency
 function GeminiProvider:_format_response(body)
   if not body or not body.candidates or not body.candidates[1] then
@@ -71,7 +87,10 @@ function GeminiProvider:_format_response(body)
     -- and no finish_reason; normalize it so the refusal is legible.
     local feedback = type(body) == "table" and body.promptFeedback
     if type(feedback) == "table" and feedback.blockReason then
-      return {
+      -- Normalized like any other reply, not returned raw: `text` is
+      -- contractually a string, and returning this table directly left it nil
+      -- for exactly the callers least likely to be checking.
+      return Response.normalize("gemini", {
         content = "",
         finish_reason = "content_filter",
         blocked = true,
@@ -79,7 +98,7 @@ function GeminiProvider:_format_response(body)
         safety_ratings = feedback.safetyRatings,
         model = type(body) == "table" and body.modelVersion or nil,
         raw = body,
-      }
+      })
     end
     return body
   end
@@ -94,7 +113,9 @@ function GeminiProvider:_format_response(body)
         content = content .. part.text
       elseif part.functionCall then
         table.insert(tool_calls, {
-          id = "call_" .. #tool_calls + 1,
+          -- Gemini supplies its own call id on newer models. Synthesizing one
+          -- unconditionally threw away the value the follow-up correlates on.
+          id = part.functionCall.id or ("call_" .. #tool_calls + 1),
           type = "function",
           ["function"] = {
             name = part.functionCall.name,
@@ -108,13 +129,14 @@ function GeminiProvider:_format_response(body)
   local result = {
     content = content,
     tool_calls = #tool_calls > 0 and tool_calls or nil,
+    -- The model's own parts, kept intact so a tool follow-up can echo them
+    -- back. Gemini 3.x signs each functionCall with a thoughtSignature and
+    -- rejects a turn that replays the call without it, so a part rebuilt from
+    -- name and args cannot be sent back.
+    parts = candidate.content and candidate.content.parts or nil,
     model = body.modelVersion,
     finish_reason = candidate.finishReason,
-    usage = body.usageMetadata and {
-      prompt_tokens = body.usageMetadata.promptTokenCount,
-      completion_tokens = body.usageMetadata.candidatesTokenCount,
-      total_tokens = body.usageMetadata.totalTokenCount,
-    } or nil,
+    usage = normalize_usage(body.usageMetadata),
     raw = body,
   }
 
@@ -238,6 +260,44 @@ function GeminiProvider:chat(messages, options)
   return self:_format_response(response.body)
 end
 
+-- Gemini spells tool choice as a nested toolConfig rather than OpenAI's
+-- `tool_choice`, so the OpenAI spelling is not merely rejected -- it is a field
+-- Gemini has never heard of. Passing it through unchanged meant a caller asking
+-- to force a tool, or to forbid one, silently got neither.
+local FUNCTION_CALLING_MODE = {
+  auto = "AUTO",
+  required = "ANY",
+  any = "ANY",
+  none = "NONE",
+}
+
+local function tool_config(choice)
+  if choice == nil then return nil end
+
+  if type(choice) == "string" then
+    local mode = FUNCTION_CALLING_MODE[choice:lower()]
+    if not mode then return nil end
+    return { functionCallingConfig = { mode = mode } }
+  end
+
+  if type(choice) == "table" then
+    -- Naming a tool is a demand for that one: OpenAI's
+    -- { type = "function", function = { name = ... } }, and Claude's
+    -- { type = "tool", name = ... }, both mean the same thing here.
+    local named = choice.name or (type(choice["function"]) == "table" and
+      choice["function"].name)
+    if named then
+      return { functionCallingConfig = {
+        mode = "ANY", allowedFunctionNames = { named } } }
+    end
+    local mode = type(choice.type) == "string" and
+      FUNCTION_CALLING_MODE[choice.type:lower()]
+    if mode then return { functionCallingConfig = { mode = mode } } end
+  end
+
+  return nil
+end
+
 function GeminiProvider:chat_with_tools(messages, tools, options)
   options = options or {}
   local model = options.model or self.config.model
@@ -269,6 +329,9 @@ function GeminiProvider:chat_with_tools(messages, tools, options)
   if system_instruction then
     payload.systemInstruction = system_instruction
   end
+
+  local config = tool_config(options.tool_choice)
+  if config and payload.toolConfig == nil then payload.toolConfig = config end
 
   local response, err, details = self.http:post(url, payload)
   if err or not response then

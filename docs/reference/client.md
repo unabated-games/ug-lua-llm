@@ -66,7 +66,10 @@ request a second one after seeing the first result:
 
 ```lua
 local Registry = require "ug-lua-llm.tools.registry"
-local tools = assert(Registry.collection({ "find_city", "get_weather" }))
+
+-- The bundled tools are opt-in; register your own with Registry.register.
+Registry.register_standard_tools()
+local tools = assert(Registry.collection({ "get_weather", "calculator" }))
 
 local first = assert(client:chat_with_tools(messages, tools))
 Registry.process_response(client, first, messages, function(final, err)
@@ -80,9 +83,47 @@ ends after one round. `max_tool_rounds` bounds a model that keeps asking for the
 same tool; when the cap is reached the response carries
 `tool_rounds_exhausted = true` rather than being passed off as complete.
 
-The bundled example tools are opt-in. Call
-`ToolRegistry.register_standard_tools()` if you want `get_weather` and
-`calculator`.
+The final response describes the whole exchange, not just the turn that
+answered — which asked for no tools, and so would otherwise report none:
+
+| Field | What it holds |
+|---|---|
+| `tool_calls` | Every call the model requested, across every round |
+| `tool_results` | Every call that ran, each with `result`, `ok`, and `error` |
+| `tool_rounds` | How many rounds were taken |
+| `tool_pending` | Calls the round cap stopped before they ran |
+| `messages` | The conversation as it now stands, ready to continue |
+
+Pass `on_tool` to watch each dispatch as it happens:
+
+```lua
+Registry.process_response(client, first, messages, function(final, err)
+  if not final then error(err) end
+  print(final.text)
+  print(#final.tool_calls .. " calls over " .. final.tool_rounds .. " rounds")
+end, {
+  tools = tools,
+  max_tool_rounds = 8,
+  on_tool = function(record)
+    print(record.name .. " -> " .. record.result_str)
+  end,
+})
+```
+
+`max_tool_rounds = 0` is meaningful: the model gets one turn, whatever it asks
+for is reported, and nothing runs. The caller's own `messages` table is never
+mutated.
+
+Follow-up turns preserve whatever the provider used to link a call to its
+result: Claude's original `tool_use` blocks, and Gemini's own parts including
+the `thoughtSignature` it signs each `functionCall` with. A turn rebuilt from
+the tool's name and arguments loses that linkage and is rejected.
+
+`ToolRegistry.register_standard_tools()` is required before `get_weather` and
+`calculator` resolve. They were registered when the module loaded before 0.3.0,
+which gave every consumer tools they never defined; `Registry.collection` now
+reports `Tool 'name' not found in registry` if you ask for one without opting
+in first.
 
 ## Structured output
 
@@ -119,6 +160,23 @@ if response.structured_applied then
   -- The schema was enforced by the provider.
 end
 ```
+
+### Schemas and tools together
+
+The two do not always compose, and how they fail depends on where the provider
+puts the schema.
+
+On Claude there is no response-format field, so the schema *is* a forced tool
+call. Asking for both is a contradiction — the model cannot be compelled to
+call the schema tool and left free to choose among yours — and it is reported
+as a validation error with `code = "schema_tool_conflict"` rather than sent.
+Ask for the schema in a follow-up call once the tool exchange has finished.
+
+Elsewhere the schema travels beside the tools and the model chooses. A model
+that answers with a tool call has not produced a JSON document, so `parsed` is
+`nil` even where `structured_applied` is true — the schema was carried, and the
+model simply did something else with its turn. **Read `parsed` rather than
+`structured_applied` when tools are also in play.**
 
 `client:capabilities().structured_output` reports the carrier: `"responses"`,
 `"chat"`, `"schema"`, `"tool"`, or `false`.

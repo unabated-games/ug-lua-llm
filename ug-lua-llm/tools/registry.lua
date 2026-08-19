@@ -290,10 +290,39 @@ function ToolRegistry.process_response(client, response, messages, callback, opt
   local provider_name = StreamHelpers.get_provider_type(client)
   options = options or {}
   local max_rounds = tonumber(options.max_tool_rounds) or DEFAULT_MAX_TOOL_ROUNDS
+  if max_rounds < 0 then max_rounds = 0 end
 
   local current_response = response
   local current_messages = messages
   local rounds = 0
+  -- Every call the model asked for, across every round, and every result that
+  -- ran. The turn that finally answers asks for nothing by definition, so
+  -- reporting only that turn leaves `tool_calls` empty in exactly the case
+  -- where tools were used successfully.
+  local attempted, performed = {}, {}
+
+  local function finish(final, pending)
+    if type(final) == "table" then
+      final.tool_calls = #attempted > 0 and attempted or nil
+      final.tool_results = performed
+      final.tool_rounds = rounds
+      -- The conversation as it now stands, so a caller can continue it.
+      local transcript = {}
+      for _, message in ipairs(current_messages) do
+        transcript[#transcript + 1] = message
+      end
+      if type(final.text) == "string" and final.text ~= "" then
+        transcript[#transcript + 1] = { role = "assistant", content = final.text }
+      end
+      final.messages = transcript
+      if pending then
+        final.tool_rounds_exhausted = true
+        final.tool_pending = pending
+      end
+    end
+    callback(final)
+    return final
+  end
 
   -- A model may need a second tool once it sees the first result -- look up a
   -- city, then look up its weather. Returning after one round meant the second
@@ -303,19 +332,18 @@ function ToolRegistry.process_response(client, response, messages, callback, opt
       client, current_response, provider_name)
 
     if #tool_calls == 0 then
-      callback(current_response)
-      return current_response
+      -- Nothing asked for: this turn is the answer.
+      return finish(current_response, nil)
     end
+
+    -- Recorded before the cap is consulted, so a capped run reports what the
+    -- model wanted as well as what it got, and the gap is legible.
+    for _, call in ipairs(tool_calls) do attempted[#attempted + 1] = call end
 
     if rounds >= max_rounds then
       -- Stop rather than loop forever, and say so instead of passing off a
       -- response whose tool calls were never executed.
-      if type(current_response) == "table" then
-        current_response.tool_rounds_exhausted = true
-        current_response.tool_rounds = rounds
-      end
-      callback(current_response)
-      return current_response
+      return finish(current_response, tool_calls)
     end
     rounds = rounds + 1
 
@@ -339,8 +367,16 @@ function ToolRegistry.process_response(client, response, messages, callback, opt
         name = call.name,
         arguments = call.arguments,
         result = result,
-        result_str = result_str
+        result_str = result_str,
+        ok = err == nil,
+        error = err,
       }
+      performed[#performed + 1] = tool_results[i]
+
+      -- Reporting a dispatch is the caller's business, not a line on stdout.
+      if type(options.on_tool) == "function" then
+        options.on_tool(tool_results[i])
+      end
     end
 
     current_messages = ToolRegistry._prepare_tool_response_messages(
@@ -485,17 +521,40 @@ function ToolRegistry._prepare_tool_response_messages(messages, tool_results, pr
         type = "tool_result",
         tool_use_id = result.id,
         content = result.result_str,
+        -- Anthropic has a flag for this. Sending a failure as ordinary content
+        -- reads to the model like a call that succeeded and happened to return
+        -- an error-shaped object.
+        is_error = (result.ok == false) or nil,
       }
     end
     table.insert(updated_messages, { role = "user", content = result_blocks })
   elseif provider_name == "gemini" then
+    -- Echo the model's own parts back rather than rebuilding them. Gemini 3.x
+    -- signs each functionCall with a thoughtSignature and refuses a follow-up
+    -- that replays the call without it, so a part reconstructed from name and
+    -- args ends the exchange with an error instead of a second round.
     local call_parts, result_parts = {}, {}
+    -- Ids the model actually sent. Older models send none, and echoing a
+    -- synthesized one back would correlate against something Gemini never
+    -- issued, so the id travels only when it came from the model.
+    local model_ids = {}
+    if assistant_response and type(assistant_response.parts) == "table" then
+      for _, part in ipairs(assistant_response.parts) do
+        call_parts[#call_parts + 1] = part
+        local call = part.functionCall
+        if type(call) == "table" and call.id then model_ids[call.id] = true end
+      end
+    end
     for _, result in ipairs(tool_results) do
-      call_parts[#call_parts + 1] = {
-        functionCall = { name = result.name, args = result.arguments or {} },
-      }
+      if #call_parts == 0 then
+        call_parts[#call_parts + 1] = {
+          functionCall = { name = result.name, args = result.arguments or {} },
+        }
+      end
       result_parts[#result_parts + 1] = {
         functionResponse = {
+          -- Correlated by the id the model sent, where it sent one.
+          id = model_ids[result.id] and result.id or nil,
           name = result.name,
           response = type(result.result) == "table" and result.result or
             { result = result.result },

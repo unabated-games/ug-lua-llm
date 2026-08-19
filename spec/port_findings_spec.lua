@@ -1,6 +1,7 @@
 -- Regressions for defects found while porting the library to another runtime.
 -- Each was visible in the source rather than in a failing test, which is why
 -- they survived: the behaviour was wrong but nothing asserted otherwise.
+local LLM = require("ug-lua-llm")
 local Response = require("ug-lua-llm.core.response")
 local Tool = require("ug-lua-llm.tools.tool")
 local Embeddings = require("ug-lua-llm.core.embeddings")
@@ -67,6 +68,26 @@ describe("Gemini blocked prompts", function()
     assert.is_true(result.blocked)
     assert.are.equal("SAFETY", result.block_reason)
     assert.are.equal("content_filter", result.finish_reason)
+  end)
+
+  it("gives the caller a normalized response, not the provider's own shape", function()
+    -- The assertion above reads _format_response directly, so it passed while
+    -- the blocked branch returned without normalizing and `text` came back nil
+    -- for every caller. Assert what a caller actually receives.
+    local client = LLM.new("gemini", { api_key = "x" })
+    client.provider.http.post = function()
+      return { status = 200, body = {
+        promptFeedback = { blockReason = "SAFETY" },
+        modelVersion = "gemini-3.6-flash",
+      } }
+    end
+
+    local response = assert(client:chat({ { role = "user", content = "hi" } }))
+    assert.are.equal("", response.text)
+    assert.are.equal("gemini", response.provider)
+    assert.is_true(response.blocked)
+    assert.are.equal("SAFETY", response.block_reason)
+    assert.are.equal("content_filter", response.finish_reason)
   end)
 end)
 
@@ -262,28 +283,22 @@ describe("OpenAI request shape", function()
   end)
 end)
 
-describe("Config explicit tracking", function()
+describe("Temperature is never defaulted", function()
   local Config = require("ug-lua-llm.core.config")
 
-  it("separates caller values from defaults", function()
-    local config = Config.new({ api_key = "k", max_tokens = 32 })
-    assert.is_true(Config.is_explicit(config, "max_tokens"))
-    assert.is_false(Config.is_explicit(config, "temperature"))
-  end)
-
-  it("survives being wrapped again on the way through the stack", function()
-    -- Config.new runs once in the entry point, once in the provider and once
-    -- in the client. Recomputing from a resolved config would mark every
-    -- default as a deliberate choice.
+  it("does not default a temperature onto a request", function()
+    -- The earlier fix tracked which values the caller supplied so the default
+    -- could be withheld. Removing the default removes the question: anything
+    -- present is the caller's choice, and no provenance is needed to tell.
     local config = Config.new({ api_key = "k", max_tokens = 32 })
     for _ = 1, 3 do config = Config.new(config) end
-    assert.is_false(Config.is_explicit(config, "temperature"))
-    assert.is_true(Config.is_explicit(config, "max_tokens"))
+    assert.is_nil(config.temperature)
+    assert.are.equal(32, config.max_tokens)
   end)
 
-  it("marks per-call overrides as explicit", function()
+  it("keeps a per-call temperature override", function()
     local merged = Config.merge(Config.new({ api_key = "k" }), { temperature = 0.2 })
-    assert.is_true(Config.is_explicit(merged, "temperature"))
+    assert.are.equal(0.2, merged.temperature)
   end)
 end)
 

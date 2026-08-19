@@ -7,7 +7,8 @@ describe("Config", function()
       assert.are.equal(120, cfg.timeout)
       assert.are.equal(3, cfg.retries)
       assert.are.equal(1, cfg.retry_delay)
-      assert.are.equal(0.7, cfg.temperature)
+      -- Deliberately absent: see the note in core/config.lua.
+      assert.is_nil(cfg.temperature)
       assert.are.equal(1024, cfg.max_tokens)
       assert.are.equal(false, cfg.debug)
       assert.is_nil(cfg.api_key)
@@ -35,7 +36,7 @@ describe("Config", function()
       local cfg = Config.new({ timeout = 30, model = "gpt-4o" })
       assert.are.equal(30, cfg.timeout)
       assert.are.equal("gpt-4o", cfg.model)
-      assert.are.equal(0.7, cfg.temperature) -- unchanged default
+      assert.is_nil(cfg.temperature) -- still unset, still not defaulted
     end)
 
     it("passes through extra options not in defaults", function()

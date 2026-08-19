@@ -31,6 +31,39 @@ Defaults are conveniences, not recommendations for every workload. Pass
 - OpenAI reasoning models accept `reasoning_effort`; supported modes depend on
   the selected model.
 
+## Tools on the Chat Completions escape hatch
+
+OpenAI's current reasoning models do not accept function tools on Chat
+Completions at all, whoever sends the request. It is the whole `gpt-5.6` family,
+not one model:
+
+```
+Function tools with reasoning_effort are not supported for gpt-5.6-terra
+in /v1/chat/completions
+```
+
+Nothing in the library sends `reasoning_effort` there; the model carries one of
+its own. Setting `api = "chat_completions"` and passing tools therefore needs a
+model that is not a reasoning model, such as `gpt-4o-mini`. The default
+Responses API has no such restriction.
+
+## Blocked prompts on Gemini
+
+Gemini answers a blocked prompt with HTTP 200, no candidates, and a
+`promptFeedback.blockReason`, rather than with an error. That is normalized to
+an ordinary refusal so it does not arrive as an unfamiliar shape:
+
+```lua
+local response = assert(client:chat(messages))
+if response.blocked then
+  print(response.block_reason)          -- e.g. "SAFETY"
+  print(response.finish_reason)         -- "content_filter"
+end
+```
+
+`response.text` is `""` in this case, so a caller that only reads `text` sees
+an empty answer rather than a crash.
+
 ## Turning reasoning off
 
 Use the normalized `reasoning` option. It accepts `false` (or `"none"`) to

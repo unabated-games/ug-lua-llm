@@ -38,7 +38,14 @@ OpenAI tool calling never produced a final answer.
 - **The Chat Completions escape hatch was unusable on current models.** It sent
   `max_tokens`, which they reject in favour of `max_completion_tokens`, and it
   forced the library's default `temperature` onto every request, which several
-  models also reject. A temperature is now sent only when the caller chose one.
+  models also reject. **There is now no temperature default at all**, so a
+  temperature present in a config is by definition one the caller chose. The
+  old rule additionally stripped a caller's temperature for models matching
+  `^o%d`; that is gone too, because `gpt-5.x` refuses a temperature and cannot
+  be recognised by name, so stripping for one family and not the other was
+  inconsistent in the direction that hides the problem. A value the caller set
+  now travels and the provider answers for it — a 400 naming the parameter
+  beats a silent drop that looks like it applied.
 - **Gemini token usage was never populated.** The provider emitted
   `prompt_tokens` while the normalizer looked for `total_input_tokens`, so the
   branch never fired. Both namings are now accepted.
@@ -47,8 +54,12 @@ OpenAI tool calling never produced a final answer.
   now joined.
 - **A blocked Gemini prompt returned the raw body.** Gemini answers 200 with
   `promptFeedback.blockReason` and no candidates; the caller saw an unfamiliar
-  shape rather than a clear refusal. It is normalized, with `blocked`,
-  `block_reason` and `finish_reason` set to `"content_filter"`.
+  shape rather than a clear refusal. It is normalized like any other reply,
+  with `blocked`, `block_reason`, `finish_reason` set to `"content_filter"`,
+  `text` as `""`, and `provider` populated. The refusal branch previously
+  returned before normalizing, so `text` was `nil` — breaking the contract that
+  it is always a string, for precisely the callers least likely to be guarding
+  against it.
 - **`RateLimiter.check` consumed a token.** A call that reads as a probe
   decremented the bucket, so any caller checking before acting spent its budget
   twice as fast as configured. `check` now only reports. Alongside that: both
@@ -68,6 +79,19 @@ OpenAI tool calling never produced a final answer.
 - **OpenRouter attribution used a header the gateway ignores.** It sent
   `X-OpenRouter-Title`; the documented header is `X-Title`, so attribution
   never took effect.
+- **Gemini tool calling never reached a second round.** Gemini 3.x signs each
+  `functionCall` with a `thoughtSignature` and rejects a follow-up that replays
+  the call without it — *"Function call is missing a thought_signature in
+  functionCall parts"* — but the follow-up turn was rebuilt from the tool's
+  name and arguments, so the signature and the model's own call id were both
+  discarded. The model's parts are now echoed back intact. OpenAI and Claude
+  were unaffected; both already preserved their original blocks.
+- **Gemini's explicit reasoning count was discarded.** The provider rebuilt
+  `usage` from three fields, dropping `thoughtsTokenCount` — the very name
+  `Response.normalize` looks for — so the cost of thinking was re-derived from
+  the gap between the total and its parts, and was absent entirely whenever the
+  total did not include it. Every field Gemini reports is now carried through,
+  so `usage.raw` also holds `cachedContentTokenCount` and the rest.
 - **`reasoning_applied` was never `true`.** It was set only when a request had
   to fall back, so the documented check `if response.reasoning_applied then`
   could not fire even when the provider honoured the request in full. It is now
@@ -82,6 +106,52 @@ OpenAI tool calling never produced a final answer.
 
 ### Changed
 
+- **Gemini ignored `tool_choice` entirely.** It is spelled as a nested
+  `toolConfig.functionCallingConfig` there rather than OpenAI's `tool_choice`,
+  and nothing translated it, so the field never reached the payload. A caller
+  asking to force a tool got a free choice, and — worse — one asking for
+  `"none"` to *forbid* tool use got tools called anyway, with no error to say
+  otherwise. `auto`, `required`/`any`, `none`, and naming a single tool now all
+  translate; a named tool becomes `allowedFunctionNames`.
+- **A failed tool was reported to Claude as an ordinary result.** Anthropic's
+  `tool_result` block has an `is_error` flag; without it a handler failure reads
+  to the model as a call that succeeded and happened to return an error-shaped
+  object. It is now set, and omitted rather than sent as `false` on success.
+- **A JSON schema and tools could not be combined on Claude, confusingly.**
+  Claude has no response-format field, so the schema is delivered as a forced
+  tool call, which the caller's own tools then contradict. The provider rejected
+  it as `Tool 'answer' not found in provided tools`, sending the caller after a
+  registration bug that did not exist. The conflict is now reported up front
+  with `code = "schema_tool_conflict"`. Where a provider has a real response
+  format the two still travel together, but a model that answers with a tool
+  call produces no JSON, so `parsed` is `nil` even when `structured_applied` is
+  true; the guidance is to read `parsed`.
+- **The rate limiter takes its clock as a parameter.** `now` and `sleep` are
+  configurable, defaulting to the wall clock and a real sleep, which makes the
+  waiting behaviour testable without waiting — the suite covers refill, burst,
+  and both failure modes in 13ms and cannot flake on a slow machine. `now` is
+  called once at configuration, so a clock reporting the wrong unit fails there
+  with a clear message rather than producing a limiter that waits a thousand
+  times too long. Alongside that: `acquire` reports which bucket bound the call,
+  a `sleep` hook that cannot pause is reported as `stalled` instead of spun on,
+  one that raises cannot corrupt the limiter, `waited` is measured from the
+  clock rather than assumed from the delays requested, a clock that goes
+  backwards no longer manufactures tokens, and `request_burst`/`token_burst`
+  default to their rates so existing behaviour is unchanged. The unused
+  `Bucket:wait_and_acquire` is gone; it decremented without re-checking and
+  could take a bucket negative.
+- **A tool exchange reports what happened across all of it.** The turn that
+  finally answers asks for no tools, so a caller reading `tool_calls` on it saw
+  nothing in exactly the case where tools had been used successfully. The final
+  response now carries `tool_calls` (every call requested, across every round),
+  `tool_results` (every one that ran, each with `ok` and `error`), `tool_rounds`,
+  and `messages` — the conversation as it now stands, ready to continue. When
+  `max_tool_rounds` stops the loop, the calls it prevented are handed back as
+  `tool_pending` rather than dropped, because the cap is now consulted after
+  recording what the model asked for rather than before. An `on_tool` callback
+  reports each dispatch, so a host can render progress instead of the library
+  writing to a stream it does not own.
+
 - **The bundled example tools are opt-in.** `get_weather` and `calculator` were
   registered when the module loaded, so every consumer inherited tools they
   never defined, in a registry shared across the process. Call
@@ -89,8 +159,21 @@ OpenAI tool calling never produced a final answer.
 - **Diagnostics go through the logger.** The tool registry called `print`,
   which writes to a stream the host may be using for its own output and cannot
   be suppressed. It now uses `Logger.warn`, which a host can route or silence.
-- `Config.is_explicit(config, key)` reports whether a value was chosen by the
-  caller or filled in as a default.
+
+### Documentation
+
+- **The Agent Skill told agents reasoning could not be controlled portably.**
+  Its API reference still described the 0.1.1 world — "there is no portable way
+  to disable it" — so an agent reading it would reach for `reasoning_effort` or
+  Claude's `thinking` by hand rather than the `reasoning` option added in
+  0.2.0. It now covers `reasoning`, `json_schema`, and the tool loop, and
+  `llms-full.txt` gained the same tool-loop and opt-in details.
+- **The documented tool-loop example could not run.** It called
+  `Registry.collection({ "find_city", "get_weather" })`, but `find_city` is not
+  a bundled tool and the bundled ones stopped being registered at load time in
+  this release, so the snippet failed with `Tool 'find_city' not found in
+  registry`.
+- Blocked Gemini prompts are documented in the provider guide.
 
 ## [0.2.0] - 2026-08-13
 

@@ -24,6 +24,12 @@ description: Build, update, debug, or review Lua applications that use the ug-lu
 
 - Prefer `response.text` over parsing provider-specific response bodies.
 - Preserve `response.raw` when exposing provider-native data.
+- Use the normalized `reasoning` and `json_schema` options rather than a
+  provider's own dialect. Both degrade rather than fail, so check
+  `response.reasoning_applied` and `response.structured_applied` before
+  treating the request as honoured.
+- Pass tools back into `ToolRegistry.process_response` as `options.tools` so a
+  model can request a second tool after seeing the first result.
 - Pass `model` explicitly when reproducibility matters.
 - Keep `/v1` on common Ollama and OpenAI-compatible base URLs.
 - Do not assume an OpenAI-compatible endpoint supports streaming, tools,
