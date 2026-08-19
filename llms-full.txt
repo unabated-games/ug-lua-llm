@@ -80,7 +80,13 @@ executes the calls and continues the conversation until the model stops asking
 for tools. Pass `options.tools` so the follow-up can request a second tool after
 seeing the first result; without it the exchange ends after one round.
 `options.max_tool_rounds` defaults to 8, and a response that hits the cap
-carries `tool_rounds_exhausted = true`. The bundled `get_weather` and
+carries `tool_rounds_exhausted = true` plus `tool_pending`, the calls it stopped.
+The final response reports the whole exchange rather than only the turn that
+answered: `tool_calls` (every call requested across every round), `tool_results`
+(every one that ran, each with ok and error), `tool_rounds`, and `messages`, the
+conversation ready to continue. `options.on_tool` is called per dispatch.
+There is no default temperature; a value present is one the caller chose, and it
+is sent as given rather than stripped for models that may refuse it. The bundled `get_weather` and
 `calculator` are opt-in since 0.3.0: call
 `ToolRegistry.register_standard_tools()` before `ToolRegistry.collection`
 resolves them.

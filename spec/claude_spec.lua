@@ -100,7 +100,20 @@ describe("Claude Provider", function()
 
       local req = mock.last_request()
       assert.is_nil(req.payload.thinking)
-      assert.is_not_nil(req.payload.temperature)
+      -- No library temperature default, so nothing is sent unless asked for.
+      assert.is_nil(req.payload.temperature)
+    end)
+
+    it("sends a temperature the caller chose", function()
+      local p = ClaudeProvider.new({ api_key = "sk-test", temperature = 0.2 })
+      mock.inject(p)
+      mock.register("POST", "https://api.anthropic.com/v1/messages", {
+        status = 200,
+        body = { content = { { type = "text", text = "ok" } } },
+      })
+
+      p:chat({ { role = "user", content = "hi" } })
+      assert.are.equal(0.2, mock.last_request().payload.temperature)
     end)
   end)
 

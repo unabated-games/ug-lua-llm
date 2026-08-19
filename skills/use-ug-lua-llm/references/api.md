@@ -43,7 +43,12 @@ runs the handlers and continues until the model stops asking for tools. Pass
 the tools back in as `options.tools`, or the follow-up cannot request anything
 and the exchange ends after one round; `options.max_tool_rounds` (default 8)
 bounds a model that keeps asking, and the response then carries
-`tool_rounds_exhausted = true`. The bundled `get_weather` and `calculator` are
+`tool_rounds_exhausted = true` with `tool_pending` holding the calls it stopped.
+Read the exchange from the final response: `tool_calls` is every call requested
+across every round, `tool_results` every one that ran, `tool_rounds` the count,
+and `messages` the conversation ready to continue. Pass `options.on_tool` to
+observe each dispatch. Do not set a temperature unless the user asked for one:
+there is no default, and several current models reject any explicit value. The bundled `get_weather` and `calculator` are
 opt-in as of 0.3.0 — call `ToolRegistry.register_standard_tools()` first or
 `Registry.collection` reports them as not found.
 

@@ -38,7 +38,14 @@ OpenAI tool calling never produced a final answer.
 - **The Chat Completions escape hatch was unusable on current models.** It sent
   `max_tokens`, which they reject in favour of `max_completion_tokens`, and it
   forced the library's default `temperature` onto every request, which several
-  models also reject. A temperature is now sent only when the caller chose one.
+  models also reject. **There is now no temperature default at all**, so a
+  temperature present in a config is by definition one the caller chose. The
+  old rule additionally stripped a caller's temperature for models matching
+  `^o%d`; that is gone too, because `gpt-5.x` refuses a temperature and cannot
+  be recognised by name, so stripping for one family and not the other was
+  inconsistent in the direction that hides the problem. A value the caller set
+  now travels and the provider answers for it — a 400 naming the parameter
+  beats a silent drop that looks like it applied.
 - **Gemini token usage was never populated.** The provider emitted
   `prompt_tokens` while the normalizer looked for `total_input_tokens`, so the
   branch never fired. Both namings are now accepted.
@@ -99,6 +106,18 @@ OpenAI tool calling never produced a final answer.
 
 ### Changed
 
+- **A tool exchange reports what happened across all of it.** The turn that
+  finally answers asks for no tools, so a caller reading `tool_calls` on it saw
+  nothing in exactly the case where tools had been used successfully. The final
+  response now carries `tool_calls` (every call requested, across every round),
+  `tool_results` (every one that ran, each with `ok` and `error`), `tool_rounds`,
+  and `messages` — the conversation as it now stands, ready to continue. When
+  `max_tool_rounds` stops the loop, the calls it prevented are handed back as
+  `tool_pending` rather than dropped, because the cap is now consulted after
+  recording what the model asked for rather than before. An `on_tool` callback
+  reports each dispatch, so a host can render progress instead of the library
+  writing to a stream it does not own.
+
 - **The bundled example tools are opt-in.** `get_weather` and `calculator` were
   registered when the module loaded, so every consumer inherited tools they
   never defined, in a registry shared across the process. Call
@@ -106,8 +125,6 @@ OpenAI tool calling never produced a final answer.
 - **Diagnostics go through the logger.** The tool registry called `print`,
   which writes to a stream the host may be using for its own output and cannot
   be suppressed. It now uses `Logger.warn`, which a host can route or silence.
-- `Config.is_explicit(config, key)` reports whether a value was chosen by the
-  caller or filled in as a default.
 
 ### Documentation
 

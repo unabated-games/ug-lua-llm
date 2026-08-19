@@ -83,6 +83,37 @@ ends after one round. `max_tool_rounds` bounds a model that keeps asking for the
 same tool; when the cap is reached the response carries
 `tool_rounds_exhausted = true` rather than being passed off as complete.
 
+The final response describes the whole exchange, not just the turn that
+answered — which asked for no tools, and so would otherwise report none:
+
+| Field | What it holds |
+|---|---|
+| `tool_calls` | Every call the model requested, across every round |
+| `tool_results` | Every call that ran, each with `result`, `ok`, and `error` |
+| `tool_rounds` | How many rounds were taken |
+| `tool_pending` | Calls the round cap stopped before they ran |
+| `messages` | The conversation as it now stands, ready to continue |
+
+Pass `on_tool` to watch each dispatch as it happens:
+
+```lua
+Registry.process_response(client, first, messages, function(final, err)
+  if not final then error(err) end
+  print(final.text)
+  print(#final.tool_calls .. " calls over " .. final.tool_rounds .. " rounds")
+end, {
+  tools = tools,
+  max_tool_rounds = 8,
+  on_tool = function(record)
+    print(record.name .. " -> " .. record.result_str)
+  end,
+})
+```
+
+`max_tool_rounds = 0` is meaningful: the model gets one turn, whatever it asks
+for is reported, and nothing runs. The caller's own `messages` table is never
+mutated.
+
 Follow-up turns preserve whatever the provider used to link a call to its
 result: Claude's original `tool_use` blocks, and Gemini's own parts including
 the `thoughtSignature` it signs each `functionCall` with. A turn rebuilt from

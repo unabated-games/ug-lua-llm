@@ -165,11 +165,6 @@ local function is_chat_only_model(model)
   return false
 end
 
--- Check if a model is an o-series reasoning model
-local function is_reasoning_model(model)
-  return model:match("^o%d") ~= nil
-end
-
 -- Complete a prompt
 function OpenAIProvider:complete(prompt, options)
   options = options or {}
@@ -239,15 +234,13 @@ function OpenAIProvider:_build_chat_payload(messages, options)
     payload.reasoning_effort = options.reasoning_effort
   end
 
-  -- Only send a temperature the caller actually chose. Several current models
-  -- accept only their own default and reject any explicit value, so passing a
-  -- library default failed requests nobody asked to constrain.
-  local Config = require "ug-lua-llm.core.config"
-  if not is_reasoning_model(model) and
-      (Config.is_explicit(options, "temperature") or
-       Config.is_explicit(self.config, "temperature")) then
-    payload.temperature = options.temperature or self.config.temperature
-  end
+  -- There is no temperature default, so anything here is the caller's choice
+  -- and travels. It is deliberately not stripped for reasoning models: the old
+  -- rule dropped it for `^o%d`, but gpt-5.x refuses a temperature too and
+  -- cannot be recognised by name, so stripping for one family and not the
+  -- other was inconsistent in the direction that hides the problem. A clear
+  -- 400 naming the parameter beats a silent drop that looks like it applied.
+  payload.temperature = options.temperature or self.config.temperature
 
   return payload
 end
