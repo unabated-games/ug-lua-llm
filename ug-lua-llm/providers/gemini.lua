@@ -2,6 +2,7 @@ local Provider = require 'ug-lua-llm.core.provider'
 local Options = require 'ug-lua-llm.utils.options'
 local Pagination = require 'ug-lua-llm.utils.pagination'
 local Response = require 'ug-lua-llm.core.response'
+local Structured = require 'ug-lua-llm.core.structured'
 
 local GeminiProvider = {}
 setmetatable(GeminiProvider, { __index = Provider })
@@ -100,7 +101,15 @@ function GeminiProvider:_format_response(body)
         raw = body,
       })
     end
-    return body
+    -- Neither candidates nor a block reason: an unfamiliar shape, but the
+    -- caller's contract still holds. Returning the body directly left `text`
+    -- nil and `provider` unset -- the last path in this function that did.
+    return Response.normalize("gemini", {
+      content = "",
+      finish_reason = nil,
+      model = type(body) == "table" and body.modelVersion or nil,
+      raw = body,
+    })
   end
 
   local candidate = body.candidates[1]
@@ -312,7 +321,11 @@ function GeminiProvider:chat_with_tools(messages, tools, options)
     table.insert(function_declarations, {
       name = tool.name,
       description = tool.description,
-      parameters = tool.parameters,
+      -- Same restricted subset as a response schema. Forwarded verbatim, a
+      -- tool schema written for OpenAI strict mode -- where
+      -- `additionalProperties: false` is required -- fails here with
+      -- 'Unknown name "additionalProperties"'.
+      parameters = Structured.gemini_schema(tool.parameters),
     })
   end
   table.insert(gemini_tools, { functionDeclarations = function_declarations })
@@ -356,6 +369,9 @@ function GeminiProvider:stream_complete(prompt, callback, options)
   return self:stream_chat(messages, function(delta, full)
     if delta.content then
       callback({
+        content = delta.content,
+        text = delta.content,
+        finish_reason = delta.finish_reason,
         choices = { { text = delta.content, index = 0, finish_reason = delta.finish_reason } },
         delta = true
       }, full)
@@ -425,6 +441,14 @@ function GeminiProvider:stream_chat(messages, callback, options)
 
   if not result then
     -- Fall back to non-streaming
+    -- A caller who asked not to fall back wants the streaming failure, not a
+    -- whole reply that hides it. Only the compatible family honoured this, so
+    -- the bundled conformance runner -- whose whole job is detecting broken
+    -- SSE -- reported streaming OK on the other three: the fallback's single
+    -- callback counts as a chunk.
+    if options and options.stream_fallback == false then
+      return nil, self:transport_error(_err, nil, "Streaming request failed")
+    end
     local response, chat_err, details = self:chat(messages, options)
     if chat_err or not response then
       return nil, chat_err, details
@@ -439,7 +463,10 @@ function GeminiProvider:stream_chat(messages, callback, options)
     return response
   end
 
-  return current_response
+  -- The fallback above returns a normalized response; this, the successful
+  -- path, returned the raw accumulator -- no text, no provider, no
+  -- finish_reason normalization.
+  return Response.normalize("gemini", current_response)
 end
 
 function GeminiProvider:stream_chat_with_tools(messages, tools, callback, options)

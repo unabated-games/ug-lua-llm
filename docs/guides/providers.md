@@ -47,6 +47,23 @@ its own. Setting `api = "chat_completions"` and passing tools therefore needs a
 model that is not a reasoning model, such as `gpt-4o-mini`. The default
 Responses API has no such restriction.
 
+## Reasoning on Claude
+
+Current models control thinking with an effort level and reject the older token
+budget outright — `"thinking.type.enabled" is not supported for this model` —
+while older ones take only the budget. The normalized `reasoning` option tries
+`output_config.effort` first and falls back to `thinking`/`thinking_budget`, so
+both generations are covered without the caller choosing.
+
+Writing Anthropic's own fields still works where the model accepts them, and
+`client:list_models()` reports per-model capabilities including which effort
+levels each one takes.
+
+Anthropic requires `temperature` to be unset when a thinking budget is in use,
+so a temperature you set is dropped on that attempt rather than failing the
+request. This is the one place the library drops a value you chose; it is an
+API requirement rather than a guess.
+
 ## Blocked prompts on Gemini
 
 Gemini answers a blocked prompt with HTTP 200, no candidates, and a

@@ -861,3 +861,297 @@ describe("completion routing follows what the endpoints actually serve", functio
     assert.are.equal("ok", seen.choices[1].text)
   end)
 end)
+
+describe("echoed items survive the round trip at every depth", function()
+  local ToolRegistry = require("ug-lua-llm.tools.registry")
+  local JSON = require("ug-lua-llm.utils.json")
+
+  it("marks nested empty containers as arrays, not just top-level ones", function()
+    -- A message item nests them two deep. The first pass handled only the top
+    -- level, so any turn where the model spoke before calling a tool failed
+    -- with "Invalid type for 'input[N].content[0].annotations'".
+    local output = {
+      { type = "message", id = "msg_1", role = "assistant", content = {
+          { type = "output_text", text = "Let me look that up.",
+            annotations = {}, logprobs = {} } } },
+      { type = "function_call", call_id = "call_1", name = "f", arguments = "{}" },
+    }
+    local messages = ToolRegistry._prepare_tool_response_messages(
+      { { role = "user", content = "go" } },
+      { { id = "call_1", name = "f", arguments = {}, result_str = "{}" } },
+      "openai", { output = output }, true)
+
+    local encoded = JSON.encode(messages[2])
+    assert.is_truthy(encoded:find('"annotations":%[%]'))
+    assert.is_truthy(encoded:find('"logprobs":%[%]'))
+    -- The text itself is untouched.
+    assert.are.equal("Let me look that up.", messages[2].content[1].text)
+  end)
+
+  it("does not turn a populated nested container into an array", function()
+    local messages = ToolRegistry._prepare_tool_response_messages(
+      { { role = "user", content = "go" } },
+      { { id = "call_1", name = "f", arguments = {}, result_str = "{}" } },
+      "openai", { output = { { type = "message", content = {
+        { type = "output_text", text = "x", meta = { kind = "note" } } } } } }, true)
+    assert.are.equal("note", messages[2].content[1].meta.kind)
+  end)
+end)
+
+describe("streamed Claude replies keep what the follow-up must echo", function()
+  local Claude = require("ug-lua-llm.providers.claude")
+  local HttpStreaming = require("ug-lua-llm.utils.http_streaming")
+
+  it("accumulates signed thinking blocks alongside tool calls", function()
+    -- Anthropic requires the signed thinking blocks echoed ahead of tool_use in
+    -- the follow-up assistant turn. The handler recognized only tool_use, so a
+    -- streamed thinking-plus-tools exchange could not legally be continued --
+    -- the same rebuild-instead-of-echo the non-streaming path was fixed for.
+    local provider = Claude.new({ api_key = "k" })
+    local original = HttpStreaming.stream_claude
+    HttpStreaming.stream_claude = function(_, _, _, on_chunk)
+      on_chunk({ type = "content_block_start", index = 0,
+        content_block = { type = "thinking", thinking = "" } })
+      on_chunk({ type = "content_block_delta", index = 0,
+        delta = { type = "thinking_delta", thinking = "Let me check." } })
+      on_chunk({ type = "content_block_delta", index = 0,
+        delta = { type = "signature_delta", signature = "SIGNED" } })
+      on_chunk({ type = "content_block_start", index = 1,
+        content_block = { type = "tool_use", id = "call_1", name = "get_weather" } })
+      on_chunk({ type = "content_block_delta", index = 1,
+        delta = { type = "input_json_delta", partial_json = '{"city":"Paris"}' } })
+      on_chunk({ type = "message_delta", delta = { stop_reason = "tool_use" } })
+      return true
+    end
+
+    local result = provider:stream_chat_with_tools(
+      { { role = "user", content = "hi" } },
+      { { name = "get_weather", description = "d",
+          parameters = { type = "object", properties = {} } } },
+      function() end)
+    HttpStreaming.stream_claude = original
+
+    -- Thinking first, signed, then the tool call.
+    assert.are.equal("thinking", result.content[1].type)
+    assert.are.equal("Let me check.", result.content[1].thinking)
+    assert.are.equal("SIGNED", result.content[1].signature)
+    assert.are.equal("tool_use", result.content[#result.content].type)
+    assert.are.equal(1, #result.tool_calls)
+  end)
+end)
+
+describe("options reach the wire on the paths that were missing them", function()
+  local function streamed_payload(options)
+    local HttpStreaming = require("ug-lua-llm.utils.http_streaming")
+    local original = HttpStreaming.stream_openai
+    local sent
+    HttpStreaming.stream_openai = function(_, _, payload, on_chunk)
+      sent = payload
+      on_chunk({ choices = { { delta = { content = "hi" }, finish_reason = "stop" } } })
+      return true
+    end
+    local client = LLM.new("openai",
+      { api_key = "k", api = "chat_completions", model = "gpt-4o-mini" })
+    local result = client:stream_chat({ { role = "user", content = "hi" } },
+      function() end, options)
+    HttpStreaming.stream_openai = original
+    return sent, result
+  end
+
+  it("carries reasoning, schema and request_options when streaming", function()
+    -- These were literal payloads with none of the three, so the ladder
+    -- reported compliance for a request that had carried nothing.
+    local sent, result = streamed_payload({
+      reasoning = "high",
+      json_schema = { name = "a", schema = { type = "object", properties = {} } },
+      request_options = { top_p = 0.5 },
+    })
+    assert.are.equal("high", sent.reasoning_effort)
+    assert.is_table(sent.response_format)
+    assert.are.equal(0.5, sent.top_p)
+    assert.is_true(result.reasoning_applied)
+    assert.is_true(result.structured_applied)
+  end)
+
+  it("keeps the token field the endpoint actually takes", function()
+    local sent = streamed_payload({})
+    assert.is_not_nil(sent.max_completion_tokens)
+    assert.is_nil(sent.max_tokens)
+  end)
+end)
+
+describe("tool_choice is translated for every provider, not two", function()
+  local tools = { { name = "get_time", description = "d",
+    parameters = { type = "object", properties = {} } } }
+
+  local function payload_for(provider, config, choice, body)
+    config.api_key = "k"
+    config.max_tokens = 64
+    local client = LLM.new(provider, config)
+    local sent
+    client.provider.http.post = function(_, _, payload)
+      sent = payload
+      return { status = 200, body = body }
+    end
+    client:chat_with_tools({ { role = "user", content = "hi" } }, tools,
+      { tool_choice = choice })
+    return sent
+  end
+
+  local CHAT_BODY = { choices = { { message = { content = "x" },
+    finish_reason = "stop" } } }
+  local RESPONSES_BODY = { status = "completed", output = {} }
+
+  it("sends OpenAI an object for a named tool, per API", function()
+    -- A bare name is "Missing required parameter: 'tool_choice.type'".
+    local responses = payload_for("openai", {}, { name = "get_time" }, RESPONSES_BODY)
+    assert.are.same({ type = "function", name = "get_time" }, responses.tool_choice)
+
+    local chat_payload = payload_for("openai", { api = "chat_completions" },
+      { name = "get_time" }, CHAT_BODY)
+    assert.are.same({ type = "function", ["function"] = { name = "get_time" } },
+      chat_payload.tool_choice)
+  end)
+
+  it("does the same for the OpenAI-compatible family", function()
+    local sent = payload_for("grok", {}, { name = "get_time" }, CHAT_BODY)
+    assert.are.same({ type = "function", ["function"] = { name = "get_time" } },
+      sent.tool_choice)
+  end)
+
+  it("leaves a plain string alone", function()
+    assert.are.equal("required",
+      payload_for("openai", { api = "chat_completions" }, "required", CHAT_BODY).tool_choice)
+  end)
+end)
+
+describe("capability reporting agrees with what construction will do", function()
+  it("does not claim embeddings for a provider whose adapter was removed", function()
+    local client = LLM.new("deepseek", { api_key = "k" })
+    assert.is_false(client:capabilities().embeddings)
+    assert.has_error(function() LLM.Embeddings.new("deepseek", { api_key = "k" }) end)
+  end)
+end)
+
+describe("a caller who declines the streaming fallback gets the failure", function()
+  -- Only the compatible family honoured this, so the bundled conformance
+  -- runner reported streaming OK on three providers whose SSE was broken: the
+  -- fallback's single callback counts as a chunk.
+  local HttpStreaming = require("ug-lua-llm.utils.http_streaming")
+
+  for _, case in ipairs({
+      { "openai", { api = "chat_completions" }, "stream_openai" },
+      { "claude", {}, "stream_claude" },
+      { "gemini", {}, nil },
+  }) do
+    it("surfaces a broken stream on " .. case[1], function()
+      local config = case[2]
+      config.api_key = "k"
+      local client = LLM.new(case[1], config)
+      local original = case[3] and HttpStreaming[case[3]]
+      if case[3] then
+        HttpStreaming[case[3]] = function() return false, "SSE unavailable" end
+      end
+      client.provider.http.stream_request = function() return nil, "SSE unavailable" end
+
+      local result, err = client:stream_chat({ { role = "user", content = "hi" } },
+        function() end, { stream_fallback = false })
+
+      if case[3] then HttpStreaming[case[3]] = original end
+      assert.is_nil(result)
+      assert.is_truthy(tostring(err):find("SSE unavailable", 1, true))
+    end)
+  end
+end)
+
+describe("Gemini's restricted schema subset applies to tools as well", function()
+  it("strips keywords Gemini rejects from tool parameters", function()
+    -- A tool schema written for OpenAI strict mode carries additionalProperties,
+    -- which Gemini rejects as an unknown field. Only responseSchema was
+    -- translated.
+    local client = LLM.new("gemini", { api_key = "k", max_tokens = 64 })
+    local sent
+    client.provider.http.post = function(_, _, payload)
+      sent = payload
+      return { status = 200, body = { candidates = { { content = {
+        parts = { { text = "x" } } }, finishReason = "STOP" } } } }
+    end
+    client:chat_with_tools({ { role = "user", content = "hi" } }, {
+      { name = "f", description = "d", parameters = {
+          type = "object", additionalProperties = false, ["$defs"] = {},
+          properties = { city = { type = "string" } } } } })
+
+    local params = sent.tools[1].functionDeclarations[1].parameters
+    assert.is_nil(params.additionalProperties)
+    assert.is_nil(params["$defs"])
+    assert.are.equal("string", params.properties.city.type)
+  end)
+end)
+
+describe("a forced tool choice applies to the turn the caller made", function()
+  local ToolRegistry = require("ug-lua-llm.tools.registry")
+
+  it("lets the model stop on the follow-up", function()
+    -- Re-sending "required" every round compels another call each time, so the
+    -- exchange runs to max_tool_rounds and never reaches an answer.
+    ToolRegistry.register("echo", { description = "d",
+      parameters = { type = "object", properties = {} },
+      handler = function() return { ok = true } end }, true)
+
+    local seen = {}
+    local client = {
+      provider = { config = { provider_name = "openai", api = "chat_completions" } },
+      config = { provider_name = "openai" },
+      capabilities = function() return {} end,
+    }
+    client.chat_with_tools = function(_, _, _, options)
+      seen[#seen + 1] = options and options.tool_choice
+      return { text = "done", provider = "openai" }
+    end
+    client.chat = client.chat_with_tools
+
+    ToolRegistry.process_response(client,
+      { text = "", provider = "openai", tool_calls = { { id = "c0", type = "function",
+        ["function"] = { name = "echo", arguments = "{}" } } } },
+      { { role = "user", content = "go" } }, function() end,
+      { tools = {}, tool_choice = "required", max_tool_rounds = 5 })
+
+    assert.are.equal("auto", seen[1])
+  end)
+end)
+
+describe("a streamed reply reports usage when the provider sends it", function()
+  local ChatStream = require("ug-lua-llm.utils.openai_chat_stream")
+
+  it("keeps the usage chunk, which carries no choices", function()
+    -- Returning early on the absence of choices discarded exactly the chunk
+    -- that carries token counts, so include_usage never produced any.
+    local accumulator = ChatStream.new("m", "openai", false)
+    accumulator:consume({ choices = { { delta = { content = "hi" },
+      finish_reason = "stop" } } }, function() end)
+    accumulator:consume({ choices = {},
+      usage = { prompt_tokens = 5, completion_tokens = 7, total_tokens = 12 } },
+      function() end)
+    assert.are.equal(5, accumulator.current.usage.prompt_tokens)
+  end)
+end)
+
+describe("Gemini tool results are sent as a Struct", function()
+  local ToolRegistry = require("ug-lua-llm.tools.registry")
+
+  local function response_for(result)
+    local messages = ToolRegistry._prepare_tool_response_messages(
+      { { role = "user", content = "go" } },
+      { { id = "c1", name = "t", arguments = {}, result = result, result_str = "x" } },
+      "gemini", { parts = {} }, false)
+    return messages[#messages].content[1].functionResponse.response
+  end
+
+  it("wraps a list, which encodes as an array and is rejected", function()
+    assert.are.same({ result = { "a", "b" } }, response_for({ "a", "b" }))
+  end)
+
+  it("passes a map through untouched", function()
+    assert.are.same({ city = "Paris" }, response_for({ city = "Paris" }))
+  end)
+end)

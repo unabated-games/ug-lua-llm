@@ -112,7 +112,8 @@ local GEMINI_UNSUPPORTED = {
   ["not"] = true, const = true, title = true,
 }
 
-local function gemini_schema(node)
+local gemini_schema
+function gemini_schema(node)
   if type(node) ~= "table" or JSON.is_null(node) then return node end
   local result = {}
   for key, value in pairs(node) do
@@ -235,6 +236,15 @@ function Structured.attempts(provider_name, spec, options)
   end
 
   return { unchanged }
+end
+
+--- Gemini accepts one restricted subset of JSON Schema, and it applies to tool
+--- parameters as much as to a response schema. Exposed because the provider
+--- builds functionDeclarations and needs the same translation: a tool schema
+--- written for OpenAI strict mode carries `additionalProperties`, which Gemini
+--- rejects outright as an unknown field.
+function Structured.gemini_schema(node)
+  return gemini_schema(node)
 end
 
 --- Whether an attempt actually carried the schema, for the same reason as

@@ -41,6 +41,10 @@ local GEMINI_MINIMUM = 1
 -- Claude reasons only when asked, and requires max_tokens above the budget.
 local CLAUDE_BUDGET = { low = 1024, medium = 4096, high = 16384 }
 
+-- Current models express thinking as an effort level instead, and report which
+-- levels they accept in their capability metadata (low/medium/high/xhigh/max).
+local CLAUDE_EFFORT = { low = "low", medium = "medium", high = "high" }
+
 --- Normalize the caller's `reasoning` option to a level, or nil when unset.
 --- Accepts false/"none" to minimize, true for a middling default, or a level.
 function Reasoning.level(value)
@@ -123,7 +127,21 @@ function Reasoning.attempts(provider_name, level, options)
         end,
       }
     end
+    -- Two spellings are in circulation and the newer models accept only the
+    -- newer one: `thinking = { type = "enabled", budget_tokens = N }` is
+    -- rejected by every current-generation model with "Use
+    -- 'thinking.type.adaptive' and 'output_config.effort'". Effort is tried
+    -- first because it is what the models list reports as supported, and the
+    -- budget form is kept as the next rung for the older models that still
+    -- take it -- so neither generation is left without a control.
     return {
+      function()
+        local next_options = copy(options)
+        local output_config = copy(next_options.output_config)
+        output_config.effort = output_config.effort or CLAUDE_EFFORT[level]
+        next_options.output_config = output_config
+        return next_options
+      end,
       function()
         local next_options = copy(options)
         local budget = CLAUDE_BUDGET[level]

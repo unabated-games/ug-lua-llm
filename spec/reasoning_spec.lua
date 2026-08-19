@@ -80,10 +80,19 @@ describe("Reasoning", function()
       assert.is_nil(attempts[1]().thinking_budget)
     end)
 
-    it("raises Claude's max_tokens above the thinking budget", function()
+    it("asks Claude for an effort level first", function()
+      -- Current models reject the budget spelling outright: "Use
+      -- 'thinking.type.adaptive' and 'output_config.effort'". Effort is what
+      -- their capability metadata reports, so it is the top rung.
+      local built = Reasoning.attempts("claude", "medium", {})[1]()
+      assert.are.equal("medium", built.output_config.effort)
+      assert.is_nil(built.thinking)
+    end)
+
+    it("keeps the thinking budget as the next rung for older models", function()
       -- Thinking is spent from max_tokens, so a ceiling at or below the budget
       -- leaves no room for an answer.
-      local built = Reasoning.attempts("claude", "medium", { max_tokens = 64 })[1]()
+      local built = Reasoning.attempts("claude", "medium", { max_tokens = 64 })[2]()
       assert.is_true(built.thinking)
       assert.are.equal(4096, built.thinking_budget)
       assert.is_true(built.max_tokens > built.thinking_budget)

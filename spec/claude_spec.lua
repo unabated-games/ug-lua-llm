@@ -167,11 +167,27 @@ describe("Claude Provider", function()
   end)
 
   describe("list_models", function()
-    it("returns hardcoded model list", function()
+    it("reads the models endpoint rather than a hardcoded list", function()
+      -- The list was hardcoded on the premise that Anthropic has no models
+      -- endpoint. It does, and the list had rotted: it named retired models and
+      -- omitted the entire current generation. This test asserted the list.
       local p = ClaudeProvider.new({ api_key = "sk-test" })
+      mock.inject(p)
+      mock.register("GET", "https://api.anthropic.com/v1/models?limit=100", {
+        status = 200,
+        body = { data = {
+          { id = "claude-sonnet-5", display_name = "Claude Sonnet 5",
+            capabilities = { effort = { supported = true } } },
+          { id = "claude-opus-5", display_name = "Claude Opus 5" },
+        } },
+      })
+
       local models = p:list_models()
-      assert.truthy(#models >= 3)
-      assert.are.equal("claude-opus-4-6", models[1].id)
+      assert.are.equal(2, #models)
+      assert.are.equal("claude-sonnet-5", models[1].id)
+      assert.are.equal("Claude Sonnet 5", models[1].name)
+      -- Capability metadata is kept, not flattened away.
+      assert.is_true(models[1].capabilities.effort.supported)
     end)
   end)
 

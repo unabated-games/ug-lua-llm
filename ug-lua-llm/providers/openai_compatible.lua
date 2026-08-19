@@ -79,7 +79,14 @@ function OpenAICompatible:_chat_payload(messages, options, tools, stream)
   }
   if tools then
     payload.tools = Tool.to_provider_format(tools, self.tool_format)
-    payload.tool_choice = options.tool_choice or "auto"
+    -- Chat Completions spelling: a named tool is an object, not a bare name.
+    local choice = options.tool_choice
+    if type(choice) == "table" then
+      local named = choice.name or
+        (type(choice["function"]) == "table" and choice["function"].name)
+      if named then choice = { type = "function", ["function"] = { name = named } } end
+    end
+    payload.tool_choice = choice or "auto"
   end
   if stream then payload.stream = true end
   return build_payload(payload, options)
@@ -169,6 +176,8 @@ function OpenAICompatible:stream_complete(prompt, callback, options)
   return self:stream_chat(messages, function(delta, full)
     if delta.choices and delta.choices[1] and delta.choices[1].delta then
       local text_delta = {
+        content = delta.choices[1].delta.content,
+        text = delta.choices[1].delta.content,
         choices = {
           {
             text = delta.choices[1].delta.content,
