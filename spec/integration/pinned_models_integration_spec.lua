@@ -111,3 +111,57 @@ describe("pinned embedding models still exist", function()
     end)
   end)
 end)
+
+describe("every streaming provider reports its stream's tool calls", function()
+  -- An invariant rather than a list. A provider that delegates to another by
+  -- copying a named set of functions silently misses anything the base grows
+  -- afterwards, and its own tests keep passing -- so the assertion has to be
+  -- "whatever can stream can also report tool calls", not "these six can".
+  --
+  -- The tell is a self-contradiction the caller cannot see: finish_reason of
+  -- "tool_calls" alongside no tool calls at all, which reads downstream as the
+  -- model having answered without using a tool.
+  local LLM = require("ug-lua-llm")
+  local env = require("ug-lua-llm.utils.env")
+  env.load(".env")
+  env.load("examples/.env")
+
+  local PROVIDERS = {
+    { name = "openai", key = "OPENAI_API_KEY",
+      config = { api = "chat_completions", model = "gpt-4o-mini" } },
+    { name = "claude", key = "ANTHROPIC_API_KEY" },
+    { name = "gemini", key = "GEMINI_API_KEY" },
+    { name = "grok", key = "GROK_API_KEY" },
+    { name = "groq", key = "GROQ_API_KEY" },
+    { name = "deepseek", key = "DEEPSEEK_API_KEY" },
+    { name = "mistral", key = "MISTRAL_API_KEY" },
+    { name = "openrouter", key = "OPENROUTER_API_KEY" },
+  }
+
+  local TOOLS = { { name = "get_weather", description = "Weather in a city",
+    parameters = { type = "object",
+      properties = { city = { type = "string" } }, required = { "city" } } } }
+
+  for _, provider in ipairs(PROVIDERS) do
+    it(provider.name .. " streams a reply whose tool calls it can report", function()
+      local api_key = env.get(provider.key)
+      if not api_key then return end
+
+      local config = provider.config or {}
+      config.api_key = api_key
+      config.max_tokens = 1024
+
+      local client = LLM.new(provider.name, config)
+      local result = client:stream_chat_with_tools(
+        { { role = "user", content = "Weather in Paris? Use the tool." } },
+        TOOLS, function() end)
+
+      assert.is_table(result)
+      local calls = result.tool_calls or {}
+      if result.finish_reason == "tool_calls" or result.finish_reason == "tool_use" then
+        assert.is_true(#calls > 0,
+          provider.name .. " reported a tool-call finish with no tool calls")
+      end
+    end)
+  end
+end)
