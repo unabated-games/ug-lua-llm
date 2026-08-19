@@ -83,7 +83,14 @@ function Client:_with_reasoning(options, invoke)
             Reasoning.control(provider_name) ~= false and index == 1
         end
         if spec then
-          result.structured_applied = schema_index == 1
+          -- Derived from whether a carrier resolved at all, not from the rung
+          -- index alone. A provider missing from the format map has exactly one
+          -- attempt -- the unchanged one -- so rung 1 is a request carrying no
+          -- schema, and reporting it as applied tells the caller their schema
+          -- was honoured by a request that never contained it. Same rule as
+          -- reasoning_applied above; it had only been applied to one of them.
+          result.structured_applied =
+            Structured.format(provider_name) ~= false and schema_index == 1
           Structured.attach(result, provider_name)
         end
         return result, err, details

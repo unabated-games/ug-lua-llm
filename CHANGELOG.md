@@ -163,6 +163,14 @@ for a provider that has no embeddings rather than returning a client that 404s.
   never asked for. Every object node is sealed now, including objects inside
   `items`, which a one-level pass misses and which is exactly the shape of a
   list of records. An explicit `additionalProperties = true` is left alone.
+- **`structured_applied` was derived from the attempt index alone.** That reads
+  correctly while every provider has a carrier, and stops the moment one does
+  not: a provider absent from the format map has a single attempt — the
+  unchanged one — so the first rung is a request carrying no schema, and the
+  caller was told their schema had been honoured by a request that never
+  contained it. It is now derived from whether a carrier resolved at all, the
+  same rule `reasoning_applied` already used, and a test keeps the map's
+  completeness from being the only thing holding it off.
 - **Structured output did nothing on the Chat Completions escape hatch, and
   said it had worked.** The schema was carried as `text.format`, which only the
   Responses API reads, and the Chat Completions payload builder did not carry

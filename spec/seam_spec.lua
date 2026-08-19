@@ -750,3 +750,39 @@ describe("the Chat Completions payload carries what it is given", function()
     assert.is_true(result.structured_applied)
   end)
 end)
+
+describe("structured_applied cannot claim a schema that was never sent", function()
+  local Structured = require("ug-lua-llm.core.structured")
+
+  it("covers every provider the library can construct", function()
+    -- The flag was derived from the rung index alone, which reads correctly
+    -- while every provider is in the format map. A provider missing from it has
+    -- one attempt -- the unchanged one -- so rung 1 carries no schema, and the
+    -- caller is told their schema was honoured by a request without it. This
+    -- keeps the map's completeness from being the only thing holding that off.
+    for _, provider in ipairs({ "openai", "claude", "gemini", "grok", "groq",
+        "openrouter", "ollama", "deepseek", "mistral", "openai-compatible" }) do
+      assert.is_truthy(Structured.format(provider),
+        provider .. " has no structured-output carrier")
+    end
+  end)
+
+  it("reports false when no carrier resolved", function()
+    local real = Structured.format
+    Structured.format = function(name)
+      if name == "openai" then return false end
+      return real(name)
+    end
+
+    local client = LLM.new("openai", { api_key = "k", api = "chat_completions" })
+    client.provider.http.post = function()
+      return { status = 200, body = { choices = { {
+        message = { content = "hi" }, finish_reason = "stop" } } } }
+    end
+    local result = client:chat({ { role = "user", content = "hi" } },
+      { json_schema = { name = "a", schema = { type = "object", properties = {} } } })
+
+    Structured.format = real
+    assert.is_false(result.structured_applied)
+  end)
+end)
