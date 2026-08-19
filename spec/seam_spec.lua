@@ -608,3 +608,66 @@ describe("a streamed reply satisfies the same contract as a whole one", function
     assert.are.equal("tool_use", result.content[2].type)
   end)
 end)
+
+describe("a tool loop run against a streamed reply", function()
+  -- Neither feature tests this path alone: streaming specs stop at the first
+  -- turn, and tool-loop specs start from a whole response. The follow-up sends
+  -- the streamed reply's `content` back to Anthropic, which requires blocks --
+  -- so while the accumulator kept a string there, the loop found no tool calls
+  -- and ended having run none, silently.
+  local ToolRegistry = require("ug-lua-llm.tools.registry")
+  local Claude = require("ug-lua-llm.providers.claude")
+  local HttpStreaming = require("ug-lua-llm.utils.http_streaming")
+
+  before_each(function()
+    ToolRegistry.register("find_city", {
+      description = "Find the city a landmark is in",
+      parameters = { type = "object", properties = {} },
+      handler = function() return { city = "Paris" } end,
+    }, true)
+  end)
+
+  it("carries the streamed call into the follow-up and finishes", function()
+    local provider = Claude.new({ api_key = "k" })
+    local original = HttpStreaming.stream_claude
+    HttpStreaming.stream_claude = function(_, _, _, on_chunk)
+      on_chunk({ type = "content_block_start", index = 0,
+        content_block = { type = "text", text = "" } })
+      on_chunk({ type = "content_block_delta", index = 0,
+        delta = { type = "text_delta", text = "Looking that up." } })
+      on_chunk({ type = "content_block_start", index = 1,
+        content_block = { type = "tool_use", id = "call_1", name = "find_city" } })
+      on_chunk({ type = "content_block_delta", index = 1,
+        delta = { type = "input_json_delta", partial_json = '{"landmark":"Eiffel"}' } })
+      on_chunk({ type = "message_delta", delta = { stop_reason = "tool_use" } })
+      return true
+    end
+
+    local tools = assert(ToolRegistry.collection({ "find_city" }))
+    local streamed = provider:stream_chat_with_tools(
+      { { role = "user", content = "where?" } }, tools, function() end)
+    HttpStreaming.stream_claude = original
+
+    assert.are.equal(1, #streamed.tool_calls)
+
+    -- The follow-up turn must receive blocks, not a string.
+    local sent
+    local client = { provider = provider, config = { provider_name = "claude" } }
+    client.chat_with_tools = function(_, messages)
+      sent = messages
+      return { text = "It is in Paris.", provider = "claude" }
+    end
+    client.chat = client.chat_with_tools
+    client.capabilities = function() return {} end
+
+    local final
+    ToolRegistry.process_response(client, streamed,
+      { { role = "user", content = "where?" } },
+      function(result) final = result end, { tools = tools })
+
+    assert.are.equal("It is in Paris.", final.text)
+    assert.are.equal(1, #final.tool_results)
+    assert.is_table(sent[2].content)
+    assert.are.equal("tool_use", sent[2].content[2].type)
+  end)
+end)
