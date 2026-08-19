@@ -75,6 +75,16 @@ Parse calls with `llm.Tool.parse_tool_calls(response)`. Each parsed call has id,
 name, decoded arguments when valid, type, and raw. Use `llm.ToolRegistry` for
 handler registration and automatic execution.
 
+`ToolRegistry.process_response(client, response, messages, callback, options)`
+executes the calls and continues the conversation until the model stops asking
+for tools. Pass `options.tools` so the follow-up can request a second tool after
+seeing the first result; without it the exchange ends after one round.
+`options.max_tool_rounds` defaults to 8, and a response that hits the cap
+carries `tool_rounds_exhausted = true`. The bundled `get_weather` and
+`calculator` are opt-in since 0.3.0: call
+`ToolRegistry.register_standard_tools()` before `ToolRegistry.collection`
+resolves them.
+
 Embeddings: `llm.Embeddings.new(provider, config):embed(input, options)` supports
 OpenAI, Gemini, Mistral, Ollama, and DeepSeek.
 
@@ -83,7 +93,10 @@ OpenAI, Gemini, Mistral, Ollama, and DeepSeek.
 Use the `reasoning` option: false or "none" to minimize, "low", "medium",
 "high", or true. It is translated per provider, and asking for less reasoning
 never turns a working request into an error: where a model refuses the control
-the request is retried without it and `response.reasoning_applied` is false.
+the request is retried without it. `response.reasoning_applied` is a boolean
+whenever a level was asked for and nil when none was, so it is true on
+compliance and false both when the control was refused and when the provider
+has none.
 `response.usage.reasoning_tokens` reports what thinking cost.
 `client:capabilities().reasoning_control` is "effort", "budget" (may refuse a
 zero budget), "opt_in" (off unless asked), or false.

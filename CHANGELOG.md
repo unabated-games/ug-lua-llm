@@ -47,8 +47,12 @@ OpenAI tool calling never produced a final answer.
   now joined.
 - **A blocked Gemini prompt returned the raw body.** Gemini answers 200 with
   `promptFeedback.blockReason` and no candidates; the caller saw an unfamiliar
-  shape rather than a clear refusal. It is normalized, with `blocked`,
-  `block_reason` and `finish_reason` set to `"content_filter"`.
+  shape rather than a clear refusal. It is normalized like any other reply,
+  with `blocked`, `block_reason`, `finish_reason` set to `"content_filter"`,
+  `text` as `""`, and `provider` populated. The refusal branch previously
+  returned before normalizing, so `text` was `nil` — breaking the contract that
+  it is always a string, for precisely the callers least likely to be guarding
+  against it.
 - **`RateLimiter.check` consumed a token.** A call that reads as a probe
   decremented the bucket, so any caller checking before acting spent its budget
   twice as fast as configured. `check` now only reports. Alongside that: both
@@ -91,6 +95,21 @@ OpenAI tool calling never produced a final answer.
   be suppressed. It now uses `Logger.warn`, which a host can route or silence.
 - `Config.is_explicit(config, key)` reports whether a value was chosen by the
   caller or filled in as a default.
+
+### Documentation
+
+- **The Agent Skill told agents reasoning could not be controlled portably.**
+  Its API reference still described the 0.1.1 world — "there is no portable way
+  to disable it" — so an agent reading it would reach for `reasoning_effort` or
+  Claude's `thinking` by hand rather than the `reasoning` option added in
+  0.2.0. It now covers `reasoning`, `json_schema`, and the tool loop, and
+  `llms-full.txt` gained the same tool-loop and opt-in details.
+- **The documented tool-loop example could not run.** It called
+  `Registry.collection({ "find_city", "get_weather" })`, but `find_city` is not
+  a bundled tool and the bundled ones stopped being registered at load time in
+  this release, so the snippet failed with `Tool 'find_city' not found in
+  registry`.
+- Blocked Gemini prompts are documented in the provider guide.
 
 ## [0.2.0] - 2026-08-13
 

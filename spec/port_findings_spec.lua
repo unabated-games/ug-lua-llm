@@ -1,6 +1,7 @@
 -- Regressions for defects found while porting the library to another runtime.
 -- Each was visible in the source rather than in a failing test, which is why
 -- they survived: the behaviour was wrong but nothing asserted otherwise.
+local LLM = require("ug-lua-llm")
 local Response = require("ug-lua-llm.core.response")
 local Tool = require("ug-lua-llm.tools.tool")
 local Embeddings = require("ug-lua-llm.core.embeddings")
@@ -67,6 +68,26 @@ describe("Gemini blocked prompts", function()
     assert.is_true(result.blocked)
     assert.are.equal("SAFETY", result.block_reason)
     assert.are.equal("content_filter", result.finish_reason)
+  end)
+
+  it("gives the caller a normalized response, not the provider's own shape", function()
+    -- The assertion above reads _format_response directly, so it passed while
+    -- the blocked branch returned without normalizing and `text` came back nil
+    -- for every caller. Assert what a caller actually receives.
+    local client = LLM.new("gemini", { api_key = "x" })
+    client.provider.http.post = function()
+      return { status = 200, body = {
+        promptFeedback = { blockReason = "SAFETY" },
+        modelVersion = "gemini-3.6-flash",
+      } }
+    end
+
+    local response = assert(client:chat({ { role = "user", content = "hi" } }))
+    assert.are.equal("", response.text)
+    assert.are.equal("gemini", response.provider)
+    assert.is_true(response.blocked)
+    assert.are.equal("SAFETY", response.block_reason)
+    assert.are.equal("content_filter", response.finish_reason)
   end)
 end)
 

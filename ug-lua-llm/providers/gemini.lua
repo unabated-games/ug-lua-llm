@@ -71,7 +71,10 @@ function GeminiProvider:_format_response(body)
     -- and no finish_reason; normalize it so the refusal is legible.
     local feedback = type(body) == "table" and body.promptFeedback
     if type(feedback) == "table" and feedback.blockReason then
-      return {
+      -- Normalized like any other reply, not returned raw: `text` is
+      -- contractually a string, and returning this table directly left it nil
+      -- for exactly the callers least likely to be checking.
+      return Response.normalize("gemini", {
         content = "",
         finish_reason = "content_filter",
         blocked = true,
@@ -79,7 +82,7 @@ function GeminiProvider:_format_response(body)
         safety_ratings = feedback.safetyRatings,
         model = type(body) == "table" and body.modelVersion or nil,
         raw = body,
-      }
+      })
     end
     return body
   end

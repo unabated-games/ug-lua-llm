@@ -66,7 +66,10 @@ request a second one after seeing the first result:
 
 ```lua
 local Registry = require "ug-lua-llm.tools.registry"
-local tools = assert(Registry.collection({ "find_city", "get_weather" }))
+
+-- The bundled tools are opt-in; register your own with Registry.register.
+Registry.register_standard_tools()
+local tools = assert(Registry.collection({ "get_weather", "calculator" }))
 
 local first = assert(client:chat_with_tools(messages, tools))
 Registry.process_response(client, first, messages, function(final, err)
@@ -80,9 +83,11 @@ ends after one round. `max_tool_rounds` bounds a model that keeps asking for the
 same tool; when the cap is reached the response carries
 `tool_rounds_exhausted = true` rather than being passed off as complete.
 
-The bundled example tools are opt-in. Call
-`ToolRegistry.register_standard_tools()` if you want `get_weather` and
-`calculator`.
+`ToolRegistry.register_standard_tools()` is required before `get_weather` and
+`calculator` resolve. They were registered when the module loaded before 0.3.0,
+which gave every consumer tools they never defined; `Registry.collection` now
+reports `Tool 'name' not found in registry` if you ask for one without opting
+in first.
 
 ## Structured output
 
