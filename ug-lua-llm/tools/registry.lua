@@ -572,15 +572,49 @@ function ToolRegistry._prepare_tool_response_messages(messages, tool_results, pr
       -- shape was rejected outright ("Unknown parameter: input[N].tool_calls"),
       -- so the follow-up request never succeeded and no final answer was ever
       -- produced.
+      -- Echo the model's own output items rather than rebuilding them, the
+      -- same rule Claude's content blocks and Gemini's parts already follow.
+      -- A reasoning model returns a `reasoning` item carrying
+      -- `encrypted_content` beside the call; rebuilding drops it, so the chain
+      -- of thought is discarded and re-derived from scratch on every round.
+      -- An empty JSON array and an empty JSON object decode to the same Lua
+      -- table, so a decoded `"summary": []` re-encodes as `{}` and the API
+      -- rejects it -- "expected an array of objects, but got an object" -- while
+      -- dropping the key fails the other way, because it is required. Mark
+      -- empty tables as arrays: every empty container in an echoed item was an
+      -- array on the wire, since an object with no keys carries no meaning to
+      -- send back.
+      local function echoable(item)
+        local copy = {}
+        for key, value in pairs(item) do
+          if type(value) == "table" and next(value) == nil then
+            copy[key] = json.empty_array()
+          else
+            copy[key] = value
+          end
+        end
+        return copy
+      end
+
+      local echoed = false
+      if assistant_response and type(assistant_response.output) == "table" then
+        for _, item in ipairs(assistant_response.output) do
+          table.insert(updated_messages, echoable(item))
+        end
+        echoed = #assistant_response.output > 0
+      end
+
       for _, result in ipairs(tool_results) do
-        table.insert(updated_messages, {
-          type = "function_call",
-          call_id = result.id,
-          name = result.name,
-          arguments = type(result.arguments) == "table"
-            and json.encode(result.arguments)
-            or tostring(result.arguments or "{}"),
-        })
+        if not echoed then
+          table.insert(updated_messages, {
+            type = "function_call",
+            call_id = result.id,
+            name = result.name,
+            arguments = type(result.arguments) == "table"
+              and json.encode(result.arguments)
+              or tostring(result.arguments or "{}"),
+          })
+        end
         table.insert(updated_messages, {
           type = "function_call_output",
           call_id = result.id,

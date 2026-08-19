@@ -344,3 +344,330 @@ describe("a schema carried as a tool cannot also carry the caller's tools", func
       { json_schema = schema }))
   end)
 end)
+
+describe("reasoning means the same thing on the escape hatch", function()
+  -- `client:response` takes the provider's own typed input, but `reasoning` is
+  -- this library's option and had been passed straight through. The Responses
+  -- API wants an object, so a caller moving a working `reasoning = "high"` from
+  -- chat to the escape hatch got "Invalid type for 'reasoning': expected an
+  -- object, but got a string instead".
+  local function payload_for(options)
+    local client = LLM.new("openai", { api_key = "k", max_tokens = 64 })
+    local sent
+    client.provider.http.post = function(_, _, body)
+      sent = body
+      return { status = 200, body = { status = "completed", output = {} } }
+    end
+    client:response({ { role = "user", content = "hi" } }, options)
+    return sent
+  end
+
+  it("translates a normalized level into the object the API takes", function()
+    assert.are.same({ effort = "high" }, payload_for({ reasoning = "high" }).reasoning)
+  end)
+
+  it("translates the boolean forms too", function()
+    assert.are.same({ effort = "none" }, payload_for({ reasoning = false }).reasoning)
+    assert.are.same({ effort = "medium" }, payload_for({ reasoning = true }).reasoning)
+  end)
+
+  it("leaves a caller's own object alone", function()
+    local reasoning = { effort = "low", summary = "auto" }
+    assert.are.same(reasoning, payload_for({ reasoning = reasoning }).reasoning)
+  end)
+
+  it("sends nothing when nothing was asked for", function()
+    assert.is_nil(payload_for({}).reasoning)
+  end)
+end)
+
+describe("tool_choice reaches every provider in its own spelling", function()
+  local tools = { { name = "get_time", description = "d",
+    parameters = { type = "object", properties = {} } } }
+
+  local function payload_for(provider, choice, body)
+    local client = LLM.new(provider, { api_key = "k", max_tokens = 64 })
+    local sent
+    client.provider.http.post = function(_, _, p)
+      sent = p
+      return { status = 200, body = body }
+    end
+    client:chat_with_tools({ { role = "user", content = "hi" } }, tools,
+      { tool_choice = choice })
+    return sent
+  end
+
+  local CLAUDE = { content = { { type = "text", text = "x" } }, stop_reason = "end_turn" }
+  local GEMINI = { candidates = { { content = { parts = { { text = "x" } } },
+    finishReason = "STOP" } } }
+
+  it("translates Claude's object form", function()
+    -- Nothing translated this, so tool_choice never reached the payload and a
+    -- caller forbidding tool use had tools called anyway.
+    assert.are.same({ type = "none" }, payload_for("claude", "none", CLAUDE).tool_choice)
+    assert.are.same({ type = "any" }, payload_for("claude", "required", CLAUDE).tool_choice)
+    assert.are.same({ type = "tool", name = "get_time" },
+      payload_for("claude", { name = "get_time" }, CLAUDE).tool_choice)
+  end)
+
+  it("translates Gemini's nested toolConfig", function()
+    assert.are.same({ functionCallingConfig = { mode = "NONE" } },
+      payload_for("gemini", "none", GEMINI).toolConfig)
+    assert.are.same({ functionCallingConfig = { mode = "ANY",
+      allowedFunctionNames = { "get_time" } } },
+      payload_for("gemini", { name = "get_time" }, GEMINI).toolConfig)
+  end)
+
+  it("leaves an unrecognized choice out rather than guessing", function()
+    assert.is_nil(payload_for("claude", "nonsense", CLAUDE).tool_choice)
+    assert.is_nil(payload_for("gemini", "nonsense", GEMINI).toolConfig)
+  end)
+end)
+
+describe("a library option nested in request_options", function()
+  local function attempt(request_options)
+    local client = LLM.new("openai", { api_key = "k", max_tokens = 64 })
+    client.provider.http.post = function(_, _, sent)
+      return { status = 200, body = { status = "completed", output = {},
+        _sent = sent } }
+    end
+    return client:chat({ { role = "user", content = "hi" } },
+      { request_options = request_options })
+  end
+
+  it("is refused rather than forwarded raw", function()
+    -- request_options reaches the provider untouched, which is what makes a
+    -- name this library also owns dangerous inside it: the ladder consumes the
+    -- top-level one, so a nested copy is forwarded and the provider rejects a
+    -- parameter the caller was told to use.
+    local result, err, details = attempt({ reasoning = "high" })
+    assert.is_nil(result)
+    assert.are.equal("library_option_in_request_options", details.code)
+    assert.is_truthy(err:find("request_options", 1, true))
+  end)
+
+  it("lets a provider's own object shape through", function()
+    -- An object is this provider's vocabulary, not ours, so the caller means it.
+    assert.is_table(attempt({ reasoning = { effort = "high" } }))
+  end)
+
+  it("does not interfere with ordinary passthrough", function()
+    assert.is_table(attempt({ top_p = 0.5 }))
+  end)
+end)
+
+describe("embeddings speak each provider's own vocabulary", function()
+  local function payload_for(provider, options)
+    local embeddings = LLM.Embeddings.new(provider, { api_key = "k" })
+    local sent
+    embeddings.http.post = function(_, _, body)
+      sent = body
+      return { status = 200, body = { data = { { embedding = { 0.1 }, index = 0 } } } }
+    end
+    embeddings:embed({ "hello" }, options)
+    return sent
+  end
+
+  it("defaults to each provider's own embedding model", function()
+    -- One hardcoded OpenAI name was used for every OpenAI-compatible service,
+    -- so Mistral was asked for a model it has never had.
+    assert.are.equal("text-embedding-3-small", payload_for("openai").model)
+    assert.are.equal("mistral-embed", payload_for("mistral").model)
+    assert.are.equal("nomic-embed-text", payload_for("ollama").model)
+  end)
+
+  it("spells the requested width the way each provider does", function()
+    assert.are.equal(256, payload_for("openai", { dimensions = 256 }).dimensions)
+    assert.are.equal(256, payload_for("mistral", { dimensions = 256 }).output_dimension)
+    assert.is_nil(payload_for("mistral", { dimensions = 256 }).dimensions)
+  end)
+
+  it("sends Gemini its width per request", function()
+    local embeddings = LLM.Embeddings.new("gemini", { api_key = "k" })
+    local sent
+    embeddings.http.post = function(_, _, body)
+      sent = body
+      return { status = 200, body = { embeddings = { { values = { 0.1 } } } } }
+    end
+    embeddings:embed({ "hello" }, { dimensions = 256 })
+    assert.are.equal(256, sent.requests[1].outputDimensionality)
+    assert.are.equal("models/gemini-embedding-001", sent.requests[1].model)
+  end)
+end)
+
+describe("echoing a provider's own structure back to it", function()
+  local ToolRegistry = require("ug-lua-llm.tools.registry")
+  local JSON = require("ug-lua-llm.utils.json")
+
+  it("marks an empty container as an array on both JSON backends", function()
+    -- An empty JSON array and an empty JSON object decode to the same Lua
+    -- table. Re-encoding a decoded `"summary": []` produced `{}`, and the
+    -- Responses API rejects that: "expected an array of objects, but got an
+    -- object instead". Dropping the key fails the other way; it is required.
+    assert.are.equal('{"s":[]}', JSON.encode({ s = JSON.empty_array() }))
+    -- The default for an empty table is still an object, which JSON Schema
+    -- `properties` and empty tool arguments depend on.
+    assert.are.equal('{"p":{}}', JSON.encode({ p = {} }))
+  end)
+
+  it("echoes the Responses output items rather than rebuilding them", function()
+    -- A reasoning model returns a `reasoning` item carrying encrypted_content
+    -- beside the call. Rebuilding kept only the call, so the chain of thought
+    -- was discarded and re-derived from scratch every round.
+    local output = {
+      { type = "reasoning", id = "rs_1", encrypted_content = "ENC", summary = {} },
+      { type = "function_call", call_id = "call_1", name = "f", arguments = "{}" },
+    }
+    local messages = ToolRegistry._prepare_tool_response_messages(
+      { { role = "user", content = "go" } },
+      { { id = "call_1", name = "f", arguments = {}, result = { ok = true },
+          result_str = '{"ok":true}' } },
+      "openai", { output = output }, true)
+
+    assert.are.equal("reasoning", messages[2].type)
+    assert.are.equal("ENC", messages[2].encrypted_content)
+    assert.are.equal("function_call", messages[3].type)
+    assert.are.equal("function_call_output", messages[4].type)
+    -- The required-but-empty field survives as an array, not an object.
+    assert.are.equal('[]', JSON.encode(messages[2].summary))
+    -- The call is echoed once, not echoed and rebuilt.
+    assert.are.equal(4, #messages)
+  end)
+
+  it("still builds the exchange when no output items were captured", function()
+    local messages = ToolRegistry._prepare_tool_response_messages(
+      { { role = "user", content = "go" } },
+      { { id = "call_1", name = "f", arguments = {}, result_str = "{}" } },
+      "openai", nil, true)
+    assert.are.equal("function_call", messages[2].type)
+    assert.are.equal("call_1", messages[2].call_id)
+  end)
+end)
+
+describe("a streamed reply satisfies the same contract as a whole one", function()
+  -- The accumulators built each provider's own shape and returned it directly,
+  -- so a streamed Claude reply carried `stop_reason` instead of `finish_reason`,
+  -- no `provider` -- which breaks the documented one-argument
+  -- `Tool.parse_tool_calls(response)` -- and a nil `text` against a contract
+  -- saying it is always a string.
+  local Claude = require("ug-lua-llm.providers.claude")
+  local HttpStreaming = require("ug-lua-llm.utils.http_streaming")
+
+  local function streamed(events)
+    local provider = Claude.new({ api_key = "k" })
+    local original = HttpStreaming.stream_claude
+    HttpStreaming.stream_claude = function(_, _, _, on_chunk)
+      for _, event in ipairs(events) do on_chunk(event) end
+      return true
+    end
+    local result = provider:stream_chat_with_tools(
+      { { role = "user", content = "hi" } },
+      { { name = "get_weather", description = "d",
+          parameters = { type = "object", properties = {} } } },
+      function() end)
+    HttpStreaming.stream_claude = original
+    return result
+  end
+
+  local EVENTS = {
+    { type = "content_block_start", index = 0,
+      content_block = { type = "text", text = "" } },
+    { type = "content_block_delta", index = 0,
+      delta = { type = "text_delta", text = "Looking that up." } },
+    { type = "content_block_start", index = 1,
+      content_block = { type = "tool_use", id = "call_1", name = "get_weather" } },
+    { type = "content_block_delta", index = 1,
+      delta = { type = "input_json_delta", partial_json = '{"city":' } },
+    { type = "content_block_delta", index = 1,
+      delta = { type = "input_json_delta", partial_json = '"Paris"}' } },
+    { type = "message_delta", delta = { stop_reason = "tool_use" } },
+  }
+
+  it("normalizes provider, text and finish reason", function()
+    local result = streamed(EVENTS)
+    assert.are.equal("claude", result.provider)
+    assert.are.equal("Looking that up.", result.text)
+    assert.are.equal("tool_use", result.finish_reason)
+  end)
+
+  it("keeps the tool call reachable through the documented parser", function()
+    -- parse_tool_calls infers the provider from the response, so a missing
+    -- `provider` made the documented single-argument form raise.
+    local result = streamed(EVENTS)
+    local parsed = LLM.Tool.parse_tool_calls(result)
+    assert.are.equal(1, #parsed)
+    assert.are.equal("get_weather", parsed[1].name)
+  end)
+
+  it("leaves content as blocks a tool follow-up can echo", function()
+    -- The follow-up sends assistant_response.content straight back to
+    -- Anthropic, which requires blocks; a string would be the wrong type.
+    local result = streamed(EVENTS)
+    assert.is_table(result.content)
+    assert.are.equal("text", result.content[1].type)
+    assert.are.equal("tool_use", result.content[2].type)
+  end)
+end)
+
+describe("a tool loop run against a streamed reply", function()
+  -- Neither feature tests this path alone: streaming specs stop at the first
+  -- turn, and tool-loop specs start from a whole response. The follow-up sends
+  -- the streamed reply's `content` back to Anthropic, which requires blocks --
+  -- so while the accumulator kept a string there, the loop found no tool calls
+  -- and ended having run none, silently.
+  local ToolRegistry = require("ug-lua-llm.tools.registry")
+  local Claude = require("ug-lua-llm.providers.claude")
+  local HttpStreaming = require("ug-lua-llm.utils.http_streaming")
+
+  before_each(function()
+    ToolRegistry.register("find_city", {
+      description = "Find the city a landmark is in",
+      parameters = { type = "object", properties = {} },
+      handler = function() return { city = "Paris" } end,
+    }, true)
+  end)
+
+  it("carries the streamed call into the follow-up and finishes", function()
+    local provider = Claude.new({ api_key = "k" })
+    local original = HttpStreaming.stream_claude
+    HttpStreaming.stream_claude = function(_, _, _, on_chunk)
+      on_chunk({ type = "content_block_start", index = 0,
+        content_block = { type = "text", text = "" } })
+      on_chunk({ type = "content_block_delta", index = 0,
+        delta = { type = "text_delta", text = "Looking that up." } })
+      on_chunk({ type = "content_block_start", index = 1,
+        content_block = { type = "tool_use", id = "call_1", name = "find_city" } })
+      on_chunk({ type = "content_block_delta", index = 1,
+        delta = { type = "input_json_delta", partial_json = '{"landmark":"Eiffel"}' } })
+      on_chunk({ type = "message_delta", delta = { stop_reason = "tool_use" } })
+      return true
+    end
+
+    local tools = assert(ToolRegistry.collection({ "find_city" }))
+    local streamed = provider:stream_chat_with_tools(
+      { { role = "user", content = "where?" } }, tools, function() end)
+    HttpStreaming.stream_claude = original
+
+    assert.are.equal(1, #streamed.tool_calls)
+
+    -- The follow-up turn must receive blocks, not a string.
+    local sent
+    local client = { provider = provider, config = { provider_name = "claude" } }
+    client.chat_with_tools = function(_, messages)
+      sent = messages
+      return { text = "It is in Paris.", provider = "claude" }
+    end
+    client.chat = client.chat_with_tools
+    client.capabilities = function() return {} end
+
+    local final
+    ToolRegistry.process_response(client, streamed,
+      { { role = "user", content = "where?" } },
+      function(result) final = result end, { tools = tools })
+
+    assert.are.equal("It is in Paris.", final.text)
+    assert.are.equal(1, #final.tool_results)
+    assert.is_table(sent[2].content)
+    assert.are.equal("tool_use", sent[2].content[2].type)
+  end)
+end)

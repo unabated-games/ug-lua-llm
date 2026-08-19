@@ -27,8 +27,10 @@ describe("Embeddings", function()
       end)
     end)
 
-    it("aliases mistral, ollama, deepseek to openai adapter", function()
-      for _, name in ipairs({ "mistral", "ollama", "deepseek" }) do
+    it("aliases mistral and ollama to the openai adapter", function()
+      -- DeepSeek was aliased here too, which is what let the documentation
+      -- claim embeddings it does not serve. Its endpoint answers 404.
+      for _, name in ipairs({ "mistral", "ollama" }) do
         local emb = Embeddings.new(name, {
           api_key = "sk-test",
           base_url = "http://localhost",
@@ -45,7 +47,6 @@ describe("Embeddings", function()
         openai = "https://api.openai.com/v1",
         ollama = "http://localhost:11434/v1",
         mistral = "https://api.mistral.ai/v1",
-        deepseek = "https://api.deepseek.com/v1",
         gemini = "https://generativelanguage.googleapis.com/v1beta",
       }
       for name, url in pairs(expected) do
@@ -115,6 +116,16 @@ describe("Embeddings", function()
       assert.are.same({ "colon" }, mock.last_request().payload.input)
       emb.embed({ "dot" })
       assert.are.same({ "dot" }, mock.last_request().payload.input)
+    end)
+  end)
+end)
+
+describe("providers without embeddings", function()
+  it("says so rather than serving a bare 404", function()
+    -- DeepSeek exposes no embeddings endpoint at all, so a caller following the
+    -- documentation got a 404 that read like a misconfiguration.
+    assert.has_error(function()
+      Embeddings.new("deepseek", { api_key = "sk-test" })
     end)
   end)
 end)

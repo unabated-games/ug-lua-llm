@@ -13,9 +13,35 @@ local Client = {}
 -- models refuse a zero thinking budget. Asking for less reasoning must never
 -- turn a working request into a failure, so the attempts run best-first and the
 -- last one always sends no reasoning control at all.
+-- `request_options` promises to reach the provider untouched, which is exactly
+-- what makes a name this library also owns dangerous inside it: the ladder
+-- consumes the top-level `reasoning`, so a copy nested here is forwarded raw
+-- and the provider rejects a parameter the caller was told to use. Only our own
+-- value shape is refused -- a level string or boolean. A provider's native
+-- object means the caller knows that API and is passed through untouched.
+local function library_option_leak(options)
+  local nested = options.request_options
+  if type(nested) ~= "table" then return nil end
+  local value = nested.reasoning
+  if type(value) == "string" or type(value) == "boolean" then
+    return "reasoning"
+  end
+  return nil
+end
+
 function Client:_with_reasoning(options, invoke)
   local provider_config = self.provider.config or {}
   local provider_name = provider_config.provider_name
+
+  local leaked = library_option_leak(options)
+  if leaked then
+    local message = leaked ..
+      " is this library's own option and is not passed through" ..
+      " request_options. Set it alongside request_options rather than inside" ..
+      " it, or use the provider's own field shape if you meant that."
+    return nil, message, Error.validation(provider_name, message,
+      "library_option_in_request_options")
+  end
 
   local level, level_error = Reasoning.level(options.reasoning)
   if options.reasoning ~= nil and not level then

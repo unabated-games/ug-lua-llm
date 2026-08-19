@@ -132,6 +132,40 @@ function ClaudeProvider:chat(messages, options)
 end
 
 -- Process a chat message with tools
+-- Claude spells tool choice as an object with a type, not OpenAI's bare string,
+-- and nothing translated it -- so `tool_choice` never reached the payload at
+-- all. A caller forcing a tool got a free choice, and one asking for "none" to
+-- forbid tool use had tools called anyway with nothing to say otherwise.
+local TOOL_CHOICE_TYPE = {
+  auto = "auto",
+  required = "any",
+  any = "any",
+  none = "none",
+}
+
+local function tool_choice(choice)
+  if choice == nil then return nil end
+
+  if type(choice) == "string" then
+    local kind = TOOL_CHOICE_TYPE[choice:lower()]
+    return kind and { type = kind } or nil
+  end
+
+  if type(choice) == "table" then
+    -- Already Claude-shaped, including the forced-tool form used to carry a
+    -- JSON schema, so it travels untouched.
+    if choice.type and (choice.type == "tool" or TOOL_CHOICE_TYPE[choice.type]) then
+      return choice
+    end
+    -- OpenAI's { type = "function", function = { name = ... } }.
+    local named = choice.name or (type(choice["function"]) == "table" and
+      choice["function"].name)
+    if named then return { type = "tool", name = named } end
+  end
+
+  return nil
+end
+
 function ClaudeProvider:chat_with_tools(messages, tools, options)
   options = options or {}
   local url = self.config.base_url .. "/messages"
@@ -141,6 +175,9 @@ function ClaudeProvider:chat_with_tools(messages, tools, options)
     return nil, self:validation_error(payload_err, "invalid_options")
   end
   payload.tools = Tool.to_provider_format(tools, "claude")
+
+  local choice = tool_choice(options.tool_choice)
+  if choice and payload.tool_choice == nil then payload.tool_choice = choice end
 
   local response, err, details = self.http:post(url, payload)
   if err or not response then
@@ -274,7 +311,12 @@ function ClaudeProvider:stream_chat(messages, callback, options)
     return formatted_response
   end
 
-  return current_response
+  -- Normalized like any other reply. The accumulator builds Anthropic's own
+  -- shape, so returning it directly gave the caller `stop_reason` instead of
+  -- `finish_reason`, no `provider` -- which breaks the documented
+  -- `Tool.parse_tool_calls(response)` -- and a nil `text` against a contract
+  -- that says it is always a string.
+  return Response.normalize("claude", current_response)
 end
 
 -- Stream a chat response with tools
@@ -394,7 +436,33 @@ function ClaudeProvider:stream_chat_with_tools(messages, tools, callback, option
     return response
   end
 
-  return current_response
+  -- Rebuild Anthropic's own content blocks before normalizing. The accumulator
+  -- keeps text as a string and tool calls beside it, but a real reply is one
+  -- array of blocks -- which is the shape the normalizer reads tool calls from,
+  -- and the shape a tool follow-up echoes back. Leaving it as a string dropped
+  -- the tool calls on normalization and would have sent a string where the
+  -- follow-up expects blocks.
+  local blocks = {}
+  if type(current_response.content) == "string" and current_response.content ~= "" then
+    blocks[#blocks + 1] = { type = "text", text = current_response.content }
+  elseif type(current_response.content) == "table" then
+    for _, block in ipairs(current_response.content) do
+      blocks[#blocks + 1] = block
+    end
+  end
+  for _, call in ipairs(current_response.tool_calls or {}) do
+    blocks[#blocks + 1] = {
+      type = "tool_use",
+      id = call.id,
+      name = call.name,
+      input = call.input or {},
+    }
+  end
+  current_response.content = blocks
+
+  -- Normalized for the same reason as the streaming chat path: the
+  -- accumulator holds Anthropic's own shape, not the caller's contract.
+  return Response.normalize("claude", current_response)
 end
 
 -- Helper method to convert generic messages to Claude format

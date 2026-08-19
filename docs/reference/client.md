@@ -114,10 +114,13 @@ end, {
 for is reported, and nothing runs. The caller's own `messages` table is never
 mutated.
 
-Follow-up turns preserve whatever the provider used to link a call to its
-result: Claude's original `tool_use` blocks, and Gemini's own parts including
-the `thoughtSignature` it signs each `functionCall` with. A turn rebuilt from
-the tool's name and arguments loses that linkage and is rejected.
+Follow-up turns echo whatever the provider sent rather than rebuilding it:
+Claude's original `tool_use` blocks, Gemini's parts including the
+`thoughtSignature` it signs each `functionCall` with, and OpenAI's `output`
+items including the `reasoning` item that carries a reasoning model's
+`encrypted_content`. Three providers, three different fields, one rule — a turn
+rebuilt from the tool's name and arguments loses that linkage, and is either
+rejected outright or silently discards the model's reasoning between rounds.
 
 `ToolRegistry.register_standard_tools()` is required before `get_weather` and
 `calculator` resolve. They were registered when the module loaded before 0.3.0,
@@ -160,6 +163,24 @@ if response.structured_applied then
   -- The schema was enforced by the provider.
 end
 ```
+
+### Choosing which tool runs
+
+`tool_choice` takes `"auto"`, `"required"` (or `"any"`), `"none"`, or a table
+naming one tool. Every provider spells this differently and the option is
+translated for each: a bare string on OpenAI-compatible services,
+`{ type = ... }` on Claude, and `toolConfig.functionCallingConfig` on Gemini,
+where naming a tool becomes `allowedFunctionNames`.
+
+```lua
+client:chat_with_tools(messages, tools, { tool_choice = "required" })
+client:chat_with_tools(messages, tools, { tool_choice = { name = "get_weather" } })
+client:chat_with_tools(messages, tools, { tool_choice = "none" })
+```
+
+`"none"` forbids tool use for that turn, which is worth stating because it is
+the case where a silently dropped option does the opposite of what was asked.
+A value no provider recognizes is left out rather than guessed at.
 
 ### Schemas and tools together
 
@@ -236,4 +257,12 @@ local embeddings = require("ug-lua-llm").Embeddings.new("openai", {
 local result = assert(embeddings:embed({ "first", "second" }))
 ```
 
-Embeddings are available for OpenAI, Gemini, Mistral, Ollama, and DeepSeek.
+Embeddings are available for OpenAI, Gemini, Mistral, and Ollama. DeepSeek
+serves no embeddings endpoint, so asking for one raises rather than returning a
+bare 404.
+
+Each provider's default embedding model is its own — `text-embedding-3-small`,
+`gemini-embedding-001`, `mistral-embed`, `nomic-embed-text` — so no
+configuration is needed beyond a key. Pass `dimensions` to ask for a narrower
+vector; it is translated per provider (`dimensions`, `outputDimensionality`,
+`output_dimension`) and not every model honours it.

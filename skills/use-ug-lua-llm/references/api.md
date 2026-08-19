@@ -48,7 +48,21 @@ Read the exchange from the final response: `tool_calls` is every call requested
 across every round, `tool_results` every one that ran, `tool_rounds` the count,
 and `messages` the conversation ready to continue. Pass `options.on_tool` to
 observe each dispatch. Do not set a temperature unless the user asked for one:
-there is no default, and several current models reject any explicit value. The bundled `get_weather` and `calculator` are
+there is no default, and several current models reject any explicit value.
+
+`tool_choice` takes `"auto"`, `"required"`/`"any"`, `"none"`, or a table naming
+one tool, and is translated per provider. Put `reasoning` and `json_schema`
+beside `request_options`, never inside it — that container reaches the provider
+untouched, so a nested copy is refused with `library_option_in_request_options`.
+Combining `json_schema` with tools is refused on Claude
+(`schema_tool_conflict`), because the schema is a forced tool call there;
+elsewhere the model may still answer with a tool call, so read `parsed` rather
+than `structured_applied`.
+
+Rate limiting is `UGLuaLLM.RateLimiter`: `configure(provider, opts)` with
+`requests_per_minute`, `tokens_per_minute`, optional bursts and `now`/`sleep`
+hooks; `acquire` waits and reports `{ ok, wait, limit, waited }`; `check` only
+reports. The bundled `get_weather` and `calculator` are
 opt-in as of 0.3.0 — call `ToolRegistry.register_standard_tools()` first or
 `Registry.collection` reports them as not found.
 
@@ -59,7 +73,8 @@ with `retry_predicate` and `backoff`; cancellation uses a function or shared
 `{ cancelled = boolean }` token.
 
 Embeddings use `llm.Embeddings.new(provider, config):embed(input, options)` and
-support OpenAI, Gemini, Mistral, Ollama, and DeepSeek. Each provider supplies
+support OpenAI, Gemini, Mistral, and Ollama; DeepSeek serves no embeddings
+endpoint. Each provider supplies its own default embedding model, and
 its own default `base_url`, so only a key (and, for Ollama, not even that) is
 required.
 

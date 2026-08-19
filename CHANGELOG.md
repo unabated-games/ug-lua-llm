@@ -106,13 +106,81 @@ OpenAI tool calling never produced a final answer.
 
 ### Changed
 
-- **Gemini ignored `tool_choice` entirely.** It is spelled as a nested
-  `toolConfig.functionCallingConfig` there rather than OpenAI's `tool_choice`,
-  and nothing translated it, so the field never reached the payload. A caller
-  asking to force a tool got a free choice, and — worse — one asking for
-  `"none"` to *forbid* tool use got tools called anyway, with no error to say
-  otherwise. `auto`, `required`/`any`, `none`, and naming a single tool now all
-  translate; a named tool becomes `allowedFunctionNames`.
+- **`reasoning` meant something different on the Responses escape hatch.**
+  `client:response` passed the option straight through to a field the API
+  requires to be an object, so a caller moving a working `reasoning = "high"`
+  from `chat` to the escape hatch got *"Invalid type for 'reasoning': expected
+  an object, but got a string instead"*. A normalized level is now translated
+  there as it is everywhere else, and a caller who supplies the provider's own
+  object still has it passed through untouched.
+- **Streaming replies did not satisfy the normalized contract on Claude.** The
+  accumulator built Anthropic's own shape and returned it directly, so a
+  streamed reply carried `stop_reason` rather than `finish_reason`, no
+  `provider` — which made the documented one-argument
+  `Tool.parse_tool_calls(response)` raise — and `text` as `nil` against a
+  contract saying it is always a string, losing the model's prose entirely when
+  it spoke before calling a tool. Both streaming paths normalize now, and the
+  accumulator rebuilds Anthropic's content blocks, which is both the shape the
+  normalizer reads tool calls from and the shape a tool follow-up echoes back;
+  a string would have been the wrong type there.
+- **Streaming sent the retired token field on Chat Completions.** 0.3.0 fixed
+  `max_tokens` to `max_completion_tokens` in the non-streaming builder and
+  missed the two streaming ones that post to the same endpoint, so current
+  models rejected the request — and the silent fallback to a non-streaming call
+  reported success, so a caller who asked to stream got a whole reply and no
+  signal that streaming had failed.
+- **OpenAI tool exchanges discarded the model's reasoning between rounds.** The
+  follow-up rebuilt a `function_call` item from the tool's name and arguments,
+  so a reasoning model's `reasoning` item — which carries its `encrypted_content`
+  alongside the call — was dropped and the chain of thought re-derived from
+  scratch on every round. The model's own `output` items are echoed back now,
+  which is the same rule Claude's content blocks and Gemini's parts already
+  follow: echo what the provider sent, do not rebuild it. Three providers, three
+  different fields, one rule.
+- **`JSON.empty_array()`**, because echoing a provider's structure back requires
+  the round trip to be faithful and it was not: an empty JSON array and an empty
+  JSON object decode to the same Lua table, so a decoded `"summary": []`
+  re-encoded as `{}` and was rejected as the wrong type. Empty tables still
+  default to objects, which JSON Schema `properties` and empty tool arguments
+  depend on; the marking is explicit and now survives encoding on both backends.
+- **Embeddings were broken on two of the four providers that have them, and
+  claimed on one that has none.** The OpenAI-compatible adapter fell back to a
+  single hardcoded OpenAI model name for every service it serves, so Mistral was
+  asked for a model it has never had — 400 — and Gemini's own default,
+  `text-embedding-004`, had been retired outright: 404. Both failed only for
+  callers who did not pass a model, which is the ones following the
+  documentation. Each provider now defaults to its own (`text-embedding-3-small`,
+  `gemini-embedding-001`, `mistral-embed`, `nomic-embed-text`), and the
+  integration suite checks all three cloud defaults still resolve. DeepSeek
+  serves no embeddings endpoint at all; it was aliased to the OpenAI adapter and
+  documented as supported, so a caller got a bare 404 that read like a
+  misconfiguration. It now raises at construction naming the providers that do
+  have them. Two existing tests asserted the alias.
+- **`dimensions` did nothing on most providers.** Each service spells the
+  requested vector width its own way — `dimensions`, `outputDimensionality`,
+  `output_dimension` — and only OpenAI's was ever sent, so the option was
+  silently ignored elsewhere. Translated now; a model that does not support a
+  narrower vector says so rather than the request quietly returning the full
+  width.
+- **`tool_choice` was ignored on both Claude and Gemini.** Each spells it
+  differently — `{ type = ... }` on Claude, a nested
+  `toolConfig.functionCallingConfig` on Gemini — and neither was translated, so
+  the option never reached either payload. A caller asking to force a tool got
+  a free choice, and — worse — one asking for `"none"` to *forbid* tool use got
+  tools called anyway, with no error to say otherwise. `auto`,
+  `required`/`any`, `none`, and naming a single tool now all translate for
+  both; a named tool becomes `allowedFunctionNames` on Gemini and
+  `{ type = "tool", name = ... }` on Claude. A value no provider recognizes is
+  left out rather than guessed at.
+- **A library option nested in `request_options` was forwarded raw.**
+  `request_options` reaches the provider untouched by design, which is what
+  makes a name this library also owns dangerous inside it: the attempt ladder
+  consumes the top-level `reasoning`, so a copy nested there went straight to
+  the provider and was rejected as a parameter the caller had been told to use.
+  It is refused up front with `code = "library_option_in_request_options"` and a
+  message naming the fix. Only this library's value shape is caught — a
+  provider's own object of the same name still passes through, because a caller
+  writing that shape means the provider's API rather than ours.
 - **A failed tool was reported to Claude as an ordinary result.** Anthropic's
   `tool_result` block has an `is_error` flag; without it a handler failure reads
   to the model as a call that succeeded and happened to return an error-shaped
