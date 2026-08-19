@@ -8,6 +8,25 @@ local Embeddings = {}
 -- caller had to supply base_url even for a provider the library already knows,
 -- and omitting it failed while building the URL rather than with a useful
 -- message.
+-- Each service names its own embedding model, and the OpenAI-compatible
+-- adapter serves several of them. Falling back to one hardcoded OpenAI name
+-- meant Mistral was asked for a model it has never had -- 400 -- while the
+-- Gemini default had been retired outright: 404, for anyone who did not pass a
+-- model. Defaults age out silently and only fail the users who did not set one.
+local DEFAULT_EMBEDDING_MODEL = {
+  openai = "text-embedding-3-small",
+  mistral = "mistral-embed",
+  gemini = "gemini-embedding-001",
+  ollama = "nomic-embed-text",
+}
+
+-- How each service spells the requested vector width. Sending OpenAI's name to
+-- the others left the option silently doing nothing.
+local DIMENSIONS_FIELD = {
+  openai = "dimensions",
+  mistral = "output_dimension",
+}
+
 local DEFAULT_BASE_URL = {
   openai = "https://api.openai.com/v1",
   ollama = "http://localhost:11434/v1",
@@ -36,12 +55,14 @@ adapters.openai = {
     local url = config.base_url .. "/embeddings"
 
     local payload = {
-      model = options.model or config.embedding_model or "text-embedding-3-small",
+      model = options.model or config.embedding_model or
+        DEFAULT_EMBEDDING_MODEL[config.provider_name] or "text-embedding-3-small",
       input = input,
     }
 
     if options.dimensions then
-      payload.dimensions = options.dimensions
+      payload[DIMENSIONS_FIELD[config.provider_name] or "dimensions"] =
+        options.dimensions
     end
 
     local response, err, details = http:post(url, payload)
@@ -83,7 +104,8 @@ adapters.openai = {
 adapters.gemini = {
   embed = function(http, config, input, options)
     options = options or {}
-    local model = options.model or config.embedding_model or "text-embedding-004"
+    local model = options.model or config.embedding_model or
+      DEFAULT_EMBEDDING_MODEL.gemini
 
     -- Gemini expects a single text or batch
     local texts = type(input) == "table" and input or { input }
@@ -95,10 +117,15 @@ adapters.gemini = {
 
     local requests = {}
     for _, text in ipairs(texts) do
-      table.insert(requests, {
+      local request = {
         model = "models/" .. model,
         content = { parts = { { text = text } } },
-      })
+      }
+      -- Gemini takes the width per request, spelled its own way.
+      if options.dimensions then
+        request.outputDimensionality = options.dimensions
+      end
+      table.insert(requests, request)
     end
 
     local payload = { requests = requests }
@@ -130,10 +157,12 @@ adapters.gemini = {
   end
 }
 
--- Alias providers that use the OpenAI-compatible format
+-- Alias providers that use the OpenAI-compatible format. DeepSeek is
+-- deliberately absent: it serves no embeddings endpoint at all, and aliasing it
+-- here produced a bare 404 that read like a misconfiguration rather than a
+-- service that does not offer the feature.
 adapters.mistral = adapters.openai
 adapters.ollama = adapters.openai
-adapters.deepseek = adapters.openai
 
 -- Create a new Embeddings client
 function Embeddings.new(provider_name, config)
@@ -158,7 +187,9 @@ function Embeddings.new(provider_name, config)
 
   local adapter = adapters[provider_name]
   if not adapter then
-    error("Embeddings not supported for provider: " .. tostring(provider_name))
+    error("Embeddings are not available for provider: " ..
+      tostring(provider_name) ..
+      ". Providers with embeddings: openai, gemini, mistral, ollama.")
   end
   if not resolved_config.base_url then
     error("Embeddings require a base_url for provider: " ..

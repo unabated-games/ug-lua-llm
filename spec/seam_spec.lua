@@ -455,3 +455,42 @@ describe("a library option nested in request_options", function()
     assert.is_table(attempt({ top_p = 0.5 }))
   end)
 end)
+
+describe("embeddings speak each provider's own vocabulary", function()
+  local function payload_for(provider, options)
+    local embeddings = LLM.Embeddings.new(provider, { api_key = "k" })
+    local sent
+    embeddings.http.post = function(_, _, body)
+      sent = body
+      return { status = 200, body = { data = { { embedding = { 0.1 }, index = 0 } } } }
+    end
+    embeddings:embed({ "hello" }, options)
+    return sent
+  end
+
+  it("defaults to each provider's own embedding model", function()
+    -- One hardcoded OpenAI name was used for every OpenAI-compatible service,
+    -- so Mistral was asked for a model it has never had.
+    assert.are.equal("text-embedding-3-small", payload_for("openai").model)
+    assert.are.equal("mistral-embed", payload_for("mistral").model)
+    assert.are.equal("nomic-embed-text", payload_for("ollama").model)
+  end)
+
+  it("spells the requested width the way each provider does", function()
+    assert.are.equal(256, payload_for("openai", { dimensions = 256 }).dimensions)
+    assert.are.equal(256, payload_for("mistral", { dimensions = 256 }).output_dimension)
+    assert.is_nil(payload_for("mistral", { dimensions = 256 }).dimensions)
+  end)
+
+  it("sends Gemini its width per request", function()
+    local embeddings = LLM.Embeddings.new("gemini", { api_key = "k" })
+    local sent
+    embeddings.http.post = function(_, _, body)
+      sent = body
+      return { status = 200, body = { embeddings = { { values = { 0.1 } } } } }
+    end
+    embeddings:embed({ "hello" }, { dimensions = 256 })
+    assert.are.equal(256, sent.requests[1].outputDimensionality)
+    assert.are.equal("models/gemini-embedding-001", sent.requests[1].model)
+  end)
+end)

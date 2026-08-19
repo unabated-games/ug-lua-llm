@@ -73,7 +73,8 @@ with `retry_predicate` and `backoff`; cancellation uses a function or shared
 `{ cancelled = boolean }` token.
 
 Embeddings use `llm.Embeddings.new(provider, config):embed(input, options)` and
-support OpenAI, Gemini, Mistral, Ollama, and DeepSeek. Each provider supplies
+support OpenAI, Gemini, Mistral, and Ollama; DeepSeek serves no embeddings
+endpoint. Each provider supplies its own default embedding model, and
 its own default `base_url`, so only a key (and, for Ollama, not even that) is
 required.
 

@@ -254,4 +254,12 @@ local embeddings = require("ug-lua-llm").Embeddings.new("openai", {
 local result = assert(embeddings:embed({ "first", "second" }))
 ```
 
-Embeddings are available for OpenAI, Gemini, Mistral, Ollama, and DeepSeek.
+Embeddings are available for OpenAI, Gemini, Mistral, and Ollama. DeepSeek
+serves no embeddings endpoint, so asking for one raises rather than returning a
+bare 404.
+
+Each provider's default embedding model is its own — `text-embedding-3-small`,
+`gemini-embedding-001`, `mistral-embed`, `nomic-embed-text` — so no
+configuration is needed beyond a key. Pass `dimensions` to ask for a narrower
+vector; it is translated per provider (`dimensions`, `outputDimensionality`,
+`output_dimension`) and not every model honours it.

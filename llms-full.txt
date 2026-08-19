@@ -113,7 +113,8 @@ with over_capacity rather than waiting for a refill that cannot arrive. The bund
 resolves them.
 
 Embeddings: `llm.Embeddings.new(provider, config):embed(input, options)` supports
-OpenAI, Gemini, Mistral, Ollama, and DeepSeek.
+OpenAI, Gemini, Mistral, and Ollama; DeepSeek serves none. Each supplies its
+own default embedding model. `dimensions` is translated per provider.
 
 ## Reasoning
 

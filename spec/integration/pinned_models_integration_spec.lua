@@ -73,3 +73,41 @@ describe("pinned models still exist", function()
     assert.is_true(checked > 0)
   end)
 end)
+
+describe("pinned embedding models still exist", function()
+  -- The chat defaults have rotted twice and the embedding defaults had rotted
+  -- silently the whole time: Gemini's was retired outright, and Mistral was
+  -- being asked for an OpenAI model it has never had. Both only ever failed
+  -- users who did not pass a model of their own.
+  local LLM = require("ug-lua-llm")
+  local env = require("ug-lua-llm.utils.env")
+  env.load(".env")
+  env.load("examples/.env")
+
+  local PROVIDERS = {
+    { name = "openai", key = "OPENAI_API_KEY" },
+    { name = "gemini", key = "GEMINI_API_KEY" },
+    { name = "mistral", key = "MISTRAL_API_KEY" },
+  }
+
+  for _, provider in ipairs(PROVIDERS) do
+    it(provider.name .. " serves its default embedding model", function()
+      local api_key = env.get(provider.key)
+      if not api_key then return end
+
+      local embeddings = LLM.Embeddings.new(provider.name, { api_key = api_key })
+      local result, err = embeddings:embed({ "pinned model check" })
+
+      assert.is_table(result, tostring(err))
+      assert.is_table(result.embeddings[1].embedding)
+      assert.is_true(#result.embeddings[1].embedding > 0)
+    end)
+  end
+
+  it("does not claim embeddings for a provider that serves none", function()
+    -- DeepSeek has no embeddings endpoint; aliasing it produced a bare 404.
+    assert.has_error(function()
+      LLM.Embeddings.new("deepseek", { api_key = "k" })
+    end)
+  end)
+end)

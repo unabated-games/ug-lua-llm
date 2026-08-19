@@ -113,6 +113,25 @@ OpenAI tool calling never produced a final answer.
   an object, but got a string instead"*. A normalized level is now translated
   there as it is everywhere else, and a caller who supplies the provider's own
   object still has it passed through untouched.
+- **Embeddings were broken on two of the four providers that have them, and
+  claimed on one that has none.** The OpenAI-compatible adapter fell back to a
+  single hardcoded OpenAI model name for every service it serves, so Mistral was
+  asked for a model it has never had — 400 — and Gemini's own default,
+  `text-embedding-004`, had been retired outright: 404. Both failed only for
+  callers who did not pass a model, which is the ones following the
+  documentation. Each provider now defaults to its own (`text-embedding-3-small`,
+  `gemini-embedding-001`, `mistral-embed`, `nomic-embed-text`), and the
+  integration suite checks all three cloud defaults still resolve. DeepSeek
+  serves no embeddings endpoint at all; it was aliased to the OpenAI adapter and
+  documented as supported, so a caller got a bare 404 that read like a
+  misconfiguration. It now raises at construction naming the providers that do
+  have them. Two existing tests asserted the alias.
+- **`dimensions` did nothing on most providers.** Each service spells the
+  requested vector width its own way — `dimensions`, `outputDimensionality`,
+  `output_dimension` — and only OpenAI's was ever sent, so the option was
+  silently ignored elsewhere. Translated now; a model that does not support a
+  narrower vector says so rather than the request quietly returning the full
+  width.
 - **`tool_choice` was ignored on both Claude and Gemini.** Each spells it
   differently — `{ type = ... }` on Claude, a nested
   `toolConfig.functionCallingConfig` on Gemini — and neither was translated, so
