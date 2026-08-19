@@ -14,18 +14,18 @@ local PROVIDER_CONFIGS = {
     description = "OpenAI (GPT models)"
   },
   claude = {
-    env_key = "CLAUDE_API_KEY",
+    env_key = "ANTHROPIC_API_KEY",
     default_model = "claude-haiku-4-5-20251001",
     description = "Anthropic Claude"
   },
   groq = {
     env_key = "GROQ_API_KEY",
     default_model = "openai/gpt-oss-20b",
-    description = "Groq (Llama, Mixtral models)"
+    description = "Groq"
   },
   grok = {
     env_key = "GROK_API_KEY",
-    default_model = "grok-2-1212",
+    default_model = "grok-4.3",
     description = "Grok"
   },
   openrouter = {
@@ -178,5 +178,10 @@ function ClientFactory.create_client(options)
     temperature = args.temperature or options.temperature or 0.7
   }
 end
+
+-- Exposed so the integration suite can verify these pins still resolve.
+-- Providers retire models without notice and a dead pin only fails the person
+-- running the example.
+ClientFactory.PROVIDER_CONFIGS = PROVIDER_CONFIGS
 
 return ClientFactory

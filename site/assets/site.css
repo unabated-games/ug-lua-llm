@@ -276,6 +276,28 @@ a:hover {
   scrollbar-width: none;
 }
 
+/* The tabs do not all fit a phone, and a strip that cuts off cleanly reads as
+   the whole list. A mask fades the tabs themselves — a background gradient
+   would paint behind them and leave the text cut hard. The classes are set
+   from the scroll position, so each side fades only while it has more to
+   show, and a wide screen that fits every tab gets no mask at all. */
+.tabs.fade-end {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 46px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 46px), transparent);
+}
+
+.tabs.fade-start {
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 46px), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 46px), transparent);
+}
+
+.tabs.fade-start.fade-end {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 46px,
+    #000 calc(100% - 46px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 46px,
+    #000 calc(100% - 46px), transparent);
+}
+
 .tabs::-webkit-scrollbar {
   display: none;
 }
