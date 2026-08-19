@@ -72,6 +72,19 @@ OpenAI tool calling never produced a final answer.
 - **OpenRouter attribution used a header the gateway ignores.** It sent
   `X-OpenRouter-Title`; the documented header is `X-Title`, so attribution
   never took effect.
+- **Gemini tool calling never reached a second round.** Gemini 3.x signs each
+  `functionCall` with a `thoughtSignature` and rejects a follow-up that replays
+  the call without it — *"Function call is missing a thought_signature in
+  functionCall parts"* — but the follow-up turn was rebuilt from the tool's
+  name and arguments, so the signature and the model's own call id were both
+  discarded. The model's parts are now echoed back intact. OpenAI and Claude
+  were unaffected; both already preserved their original blocks.
+- **Gemini's explicit reasoning count was discarded.** The provider rebuilt
+  `usage` from three fields, dropping `thoughtsTokenCount` — the very name
+  `Response.normalize` looks for — so the cost of thinking was re-derived from
+  the gap between the total and its parts, and was absent entirely whenever the
+  total did not include it. Every field Gemini reports is now carried through,
+  so `usage.raw` also holds `cachedContentTokenCount` and the rest.
 - **`reasoning_applied` was never `true`.** It was set only when a request had
   to fall back, so the documented check `if response.reasoning_applied then`
   could not fire even when the provider honoured the request in full. It is now

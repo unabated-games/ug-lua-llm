@@ -489,13 +489,32 @@ function ToolRegistry._prepare_tool_response_messages(messages, tool_results, pr
     end
     table.insert(updated_messages, { role = "user", content = result_blocks })
   elseif provider_name == "gemini" then
+    -- Echo the model's own parts back rather than rebuilding them. Gemini 3.x
+    -- signs each functionCall with a thoughtSignature and refuses a follow-up
+    -- that replays the call without it, so a part reconstructed from name and
+    -- args ends the exchange with an error instead of a second round.
     local call_parts, result_parts = {}, {}
+    -- Ids the model actually sent. Older models send none, and echoing a
+    -- synthesized one back would correlate against something Gemini never
+    -- issued, so the id travels only when it came from the model.
+    local model_ids = {}
+    if assistant_response and type(assistant_response.parts) == "table" then
+      for _, part in ipairs(assistant_response.parts) do
+        call_parts[#call_parts + 1] = part
+        local call = part.functionCall
+        if type(call) == "table" and call.id then model_ids[call.id] = true end
+      end
+    end
     for _, result in ipairs(tool_results) do
-      call_parts[#call_parts + 1] = {
-        functionCall = { name = result.name, args = result.arguments or {} },
-      }
+      if #call_parts == 0 then
+        call_parts[#call_parts + 1] = {
+          functionCall = { name = result.name, args = result.arguments or {} },
+        }
+      end
       result_parts[#result_parts + 1] = {
         functionResponse = {
+          -- Correlated by the id the model sent, where it sent one.
+          id = model_ids[result.id] and result.id or nil,
           name = result.name,
           response = type(result.result) == "table" and result.result or
             { result = result.result },

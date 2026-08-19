@@ -83,6 +83,11 @@ ends after one round. `max_tool_rounds` bounds a model that keeps asking for the
 same tool; when the cap is reached the response carries
 `tool_rounds_exhausted = true` rather than being passed off as complete.
 
+Follow-up turns preserve whatever the provider used to link a call to its
+result: Claude's original `tool_use` blocks, and Gemini's own parts including
+the `thoughtSignature` it signs each `functionCall` with. A turn rebuilt from
+the tool's name and arguments loses that linkage and is rejected.
+
 `ToolRegistry.register_standard_tools()` is required before `get_weather` and
 `calculator` resolve. They were registered when the module loaded before 0.3.0,
 which gave every consumer tools they never defined; `Registry.collection` now

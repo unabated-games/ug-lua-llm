@@ -63,6 +63,22 @@ function GeminiProvider:_format_contents(messages)
   return contents, system_instruction
 end
 
+-- Gemini reports usage under its own names. Rebuilding the table from three of
+-- them dropped the rest -- including thoughtsTokenCount, the explicit reasoning
+-- count Response.normalize looks for -- so the cost of thinking had to be
+-- re-derived from the gap between the total and its parts, and was simply
+-- absent whenever the total did not include it. Carry every field through and
+-- add the normalized names beside them.
+local function normalize_usage(metadata)
+  if type(metadata) ~= "table" then return nil end
+  local usage = {}
+  for key, value in pairs(metadata) do usage[key] = value end
+  usage.prompt_tokens = metadata.promptTokenCount
+  usage.completion_tokens = metadata.candidatesTokenCount
+  usage.total_tokens = metadata.totalTokenCount
+  return usage
+end
+
 -- Convert Gemini response to OpenAI-like format for consistency
 function GeminiProvider:_format_response(body)
   if not body or not body.candidates or not body.candidates[1] then
@@ -97,7 +113,9 @@ function GeminiProvider:_format_response(body)
         content = content .. part.text
       elseif part.functionCall then
         table.insert(tool_calls, {
-          id = "call_" .. #tool_calls + 1,
+          -- Gemini supplies its own call id on newer models. Synthesizing one
+          -- unconditionally threw away the value the follow-up correlates on.
+          id = part.functionCall.id or ("call_" .. #tool_calls + 1),
           type = "function",
           ["function"] = {
             name = part.functionCall.name,
@@ -111,13 +129,14 @@ function GeminiProvider:_format_response(body)
   local result = {
     content = content,
     tool_calls = #tool_calls > 0 and tool_calls or nil,
+    -- The model's own parts, kept intact so a tool follow-up can echo them
+    -- back. Gemini 3.x signs each functionCall with a thoughtSignature and
+    -- rejects a turn that replays the call without it, so a part rebuilt from
+    -- name and args cannot be sent back.
+    parts = candidate.content and candidate.content.parts or nil,
     model = body.modelVersion,
     finish_reason = candidate.finishReason,
-    usage = body.usageMetadata and {
-      prompt_tokens = body.usageMetadata.promptTokenCount,
-      completion_tokens = body.usageMetadata.candidatesTokenCount,
-      total_tokens = body.usageMetadata.totalTokenCount,
-    } or nil,
+    usage = normalize_usage(body.usageMetadata),
     raw = body,
   }
 
