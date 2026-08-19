@@ -127,7 +127,8 @@ end
 
 `reasoning` accepts `false`/`"none"`, `"low"`, `"medium"`, `"high"`, or `true`.
 See the [provider guide](../guides/providers.md) for what each provider can
-actually honour, `response.reasoning_applied` for whether it did, and
+actually honour, `response.reasoning_applied` for whether it did — a boolean
+when you asked for a level, `nil` when you did not — and
 `response.usage.reasoning_tokens` for what it cost.
 
 ## Streaming

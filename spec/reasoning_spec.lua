@@ -154,6 +154,22 @@ describe("Client reasoning integration", function()
   it("marks a complying request as applied", function()
     local p = provider("grok", function(opts) return { opts = opts } end)
     local result = Client.new(p, {}):chat({}, { reasoning = false })
+    -- True, not nil: `if response.reasoning_applied then` has to work.
+    assert.is_true(result.reasoning_applied)
+  end)
+
+  it("reports no compliance from a provider without the control", function()
+    -- The request succeeds, but nothing was sent to control reasoning, so
+    -- saying it was applied would be a lie.
+    local p = provider("nosuchprovider", function(opts) return { opts = opts } end)
+    local result = Client.new(p, {}):chat({}, { reasoning = "high" })
+    assert.is_false(result.reasoning_applied)
+    assert.is_nil(p.calls[1].reasoning_effort)
+  end)
+
+  it("leaves compliance unreported when no level was asked for", function()
+    local p = provider("grok", function(opts) return { opts = opts } end)
+    local result = Client.new(p, {}):chat({})
     assert.is_nil(result.reasoning_applied)
   end)
 

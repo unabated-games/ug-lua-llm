@@ -68,6 +68,13 @@ OpenAI tool calling never produced a final answer.
 - **OpenRouter attribution used a header the gateway ignores.** It sent
   `X-OpenRouter-Title`; the documented header is `X-Title`, so attribution
   never took effect.
+- **`reasoning_applied` was never `true`.** It was set only when a request had
+  to fall back, so the documented check `if response.reasoning_applied then`
+  could not fire even when the provider honoured the request in full. It is now
+  a boolean whenever a level was asked for — `false` also covering a provider
+  with no reasoning control, which previously looked identical to compliance —
+  and stays `nil` when no level was asked for. The test covering it was named
+  for the correct behaviour but asserted the defect.
 - **A transport failure could be mistaken for a provider refusal.** The
   `reasoning` and `json_schema` fallbacks matched on the error message even
   when no HTTP status was present, so an unrelated failure could be retried

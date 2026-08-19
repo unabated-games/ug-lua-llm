@@ -48,8 +48,14 @@ function Client:_with_reasoning(options, invoke)
 
       if result then
         -- Report compliance separately from success, so a caller can tell a
-        -- degraded request from one that did what was asked.
-        if index > 1 then result.reasoning_applied = false end
+        -- degraded request from one that did what was asked. Only meaningful
+        -- when the caller asked for a level, so it stays nil when they did
+        -- not; a provider with no control never applied one, however the
+        -- attempt went.
+        if level then
+          result.reasoning_applied =
+            Reasoning.control(provider_name) ~= false and index == 1
+        end
         if spec then
           result.structured_applied = schema_index == 1
           Structured.attach(result, provider_name)
