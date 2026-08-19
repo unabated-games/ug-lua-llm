@@ -106,6 +106,13 @@ OpenAI tool calling never produced a final answer.
 
 ### Changed
 
+- **`reasoning` meant something different on the Responses escape hatch.**
+  `client:response` passed the option straight through to a field the API
+  requires to be an object, so a caller moving a working `reasoning = "high"`
+  from `chat` to the escape hatch got *"Invalid type for 'reasoning': expected
+  an object, but got a string instead"*. A normalized level is now translated
+  there as it is everywhere else, and a caller who supplies the provider's own
+  object still has it passed through untouched.
 - **Gemini ignored `tool_choice` entirely.** It is spelled as a nested
   `toolConfig.functionCallingConfig` there rather than OpenAI's `tool_choice`,
   and nothing translated it, so the field never reached the payload. A caller

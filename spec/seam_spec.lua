@@ -344,3 +344,39 @@ describe("a schema carried as a tool cannot also carry the caller's tools", func
       { json_schema = schema }))
   end)
 end)
+
+describe("reasoning means the same thing on the escape hatch", function()
+  -- `client:response` takes the provider's own typed input, but `reasoning` is
+  -- this library's option and had been passed straight through. The Responses
+  -- API wants an object, so a caller moving a working `reasoning = "high"` from
+  -- chat to the escape hatch got "Invalid type for 'reasoning': expected an
+  -- object, but got a string instead".
+  local function payload_for(options)
+    local client = LLM.new("openai", { api_key = "k", max_tokens = 64 })
+    local sent
+    client.provider.http.post = function(_, _, body)
+      sent = body
+      return { status = 200, body = { status = "completed", output = {} } }
+    end
+    client:response({ { role = "user", content = "hi" } }, options)
+    return sent
+  end
+
+  it("translates a normalized level into the object the API takes", function()
+    assert.are.same({ effort = "high" }, payload_for({ reasoning = "high" }).reasoning)
+  end)
+
+  it("translates the boolean forms too", function()
+    assert.are.same({ effort = "none" }, payload_for({ reasoning = false }).reasoning)
+    assert.are.same({ effort = "medium" }, payload_for({ reasoning = true }).reasoning)
+  end)
+
+  it("leaves a caller's own object alone", function()
+    local reasoning = { effort = "low", summary = "auto" }
+    assert.are.same(reasoning, payload_for({ reasoning = reasoning }).reasoning)
+  end)
+
+  it("sends nothing when nothing was asked for", function()
+    assert.is_nil(payload_for({}).reasoning)
+  end)
+end)

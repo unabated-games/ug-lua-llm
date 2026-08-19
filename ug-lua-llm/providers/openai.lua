@@ -2,6 +2,7 @@ local Provider = require 'ug-lua-llm.core.provider'
 local Tool = require 'ug-lua-llm.tools.tool'
 local Options = require 'ug-lua-llm.utils.options'
 local Response = require 'ug-lua-llm.core.response'
+local Reasoning = require 'ug-lua-llm.core.reasoning'
 local ChatStream = require 'ug-lua-llm.utils.openai_chat_stream'
 local Pagination = require 'ug-lua-llm.utils.pagination'
 
@@ -95,8 +96,20 @@ function OpenAIProvider:_responses_payload(messages, options, tools)
     input = messages,
     max_output_tokens = options.max_tokens or self.config.max_tokens,
   }, options)
-  if options.reasoning or options.reasoning_effort or options.reasoning_mode then
-    payload.reasoning = options.reasoning or {}
+  if options.reasoning ~= nil or options.reasoning_effort or options.reasoning_mode then
+    -- `reasoning` means the same thing here as it does on chat. The Responses
+    -- API wants an object, so a normalized level -- the string or boolean every
+    -- other call path takes -- has to be translated rather than passed through
+    -- as "Invalid type for 'reasoning': expected an object, but got a string".
+    -- A caller who already knows the provider's own shape still sends a table.
+    local reasoning = options.reasoning
+    if type(reasoning) == "table" then
+      payload.reasoning = reasoning
+    else
+      payload.reasoning = {}
+      local level = Reasoning.level(reasoning)
+      if level then payload.reasoning.effort = level end
+    end
     if options.reasoning_effort then payload.reasoning.effort = options.reasoning_effort end
     if options.reasoning_mode then payload.reasoning.mode = options.reasoning_mode end
   end
