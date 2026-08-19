@@ -113,13 +113,25 @@ OpenAI tool calling never produced a final answer.
   an object, but got a string instead"*. A normalized level is now translated
   there as it is everywhere else, and a caller who supplies the provider's own
   object still has it passed through untouched.
-- **Gemini ignored `tool_choice` entirely.** It is spelled as a nested
-  `toolConfig.functionCallingConfig` there rather than OpenAI's `tool_choice`,
-  and nothing translated it, so the field never reached the payload. A caller
-  asking to force a tool got a free choice, and — worse — one asking for
-  `"none"` to *forbid* tool use got tools called anyway, with no error to say
-  otherwise. `auto`, `required`/`any`, `none`, and naming a single tool now all
-  translate; a named tool becomes `allowedFunctionNames`.
+- **`tool_choice` was ignored on both Claude and Gemini.** Each spells it
+  differently — `{ type = ... }` on Claude, a nested
+  `toolConfig.functionCallingConfig` on Gemini — and neither was translated, so
+  the option never reached either payload. A caller asking to force a tool got
+  a free choice, and — worse — one asking for `"none"` to *forbid* tool use got
+  tools called anyway, with no error to say otherwise. `auto`,
+  `required`/`any`, `none`, and naming a single tool now all translate for
+  both; a named tool becomes `allowedFunctionNames` on Gemini and
+  `{ type = "tool", name = ... }` on Claude. A value no provider recognizes is
+  left out rather than guessed at.
+- **A library option nested in `request_options` was forwarded raw.**
+  `request_options` reaches the provider untouched by design, which is what
+  makes a name this library also owns dangerous inside it: the attempt ladder
+  consumes the top-level `reasoning`, so a copy nested there went straight to
+  the provider and was rejected as a parameter the caller had been told to use.
+  It is refused up front with `code = "library_option_in_request_options"` and a
+  message naming the fix. Only this library's value shape is caught — a
+  provider's own object of the same name still passes through, because a caller
+  writing that shape means the provider's API rather than ours.
 - **A failed tool was reported to Claude as an ordinary result.** Anthropic's
   `tool_result` block has an `is_error` flag; without it a handler failure reads
   to the model as a call that succeeded and happened to return an error-shaped

@@ -24,6 +24,25 @@ Set `on_request`, `on_retry`, `on_response`, and `on_error` in client
 configuration. Hooks receive sanitized metadata such as request ID, provider,
 model, attempt, status, and elapsed time. Hook failures do not fail requests.
 
+## Options this library owns
+
+`reasoning` and `json_schema` are this library's own options and are consumed
+before a request is built. They do not belong in `request_options`, which
+reaches the provider untouched by design — a copy nested there is forwarded raw,
+and the provider rejects a parameter you were told to use:
+
+```lua
+-- Refused, with code "library_option_in_request_options".
+client:chat(messages, { request_options = { reasoning = "high" } })
+
+-- Correct: alongside request_options, not inside it.
+client:chat(messages, { reasoning = "high", request_options = { top_p = 0.5 } })
+```
+
+Only this library's value shape is refused. A provider's own field of the same
+name — OpenAI's `reasoning` object, for instance — is passed through untouched,
+because a caller writing that shape means the provider's API rather than ours.
+
 ## Client-side rate limiting
 
 `UGLuaLLM.RateLimiter` paces your own requests before a provider has to. It

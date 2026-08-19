@@ -37,6 +37,8 @@ print(response.text)
   rather than failing where a model cannot comply.
 - Structured, redacted errors plus retries, cancellation, lifecycle hooks, and
   endpoint conformance checks.
+- Client-side rate limiting with an injectable clock, so pacing can be tested
+  without waiting.
 - Tested on Lua 5.1, 5.2, 5.3, and 5.4.
 
 ## Install

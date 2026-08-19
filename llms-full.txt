@@ -86,7 +86,28 @@ answered: `tool_calls` (every call requested across every round), `tool_results`
 (every one that ran, each with ok and error), `tool_rounds`, and `messages`, the
 conversation ready to continue. `options.on_tool` is called per dispatch.
 There is no default temperature; a value present is one the caller chose, and it
-is sent as given rather than stripped for models that may refuse it. The bundled `get_weather` and
+is sent as given rather than stripped for models that may refuse it.
+
+`options.tool_choice` takes "auto", "required"/"any", "none", or a table naming
+one tool, and is translated per provider: a bare string on OpenAI-compatible
+services, { type = ... } on Claude, toolConfig.functionCallingConfig on Gemini.
+
+`reasoning` and `json_schema` belong beside `request_options`, never inside it:
+request_options reaches the provider untouched, so a nested copy is forwarded raw
+and refused with code library_option_in_request_options. A provider's own object
+of the same name still passes through.
+
+Combining json_schema with tools is refused on Claude with code
+schema_tool_conflict, because a schema there is itself a forced tool call.
+Elsewhere both travel and the model chooses, so `parsed` is nil when the turn
+was spent on a tool call even though structured_applied is true: read `parsed`.
+
+Rate limiting: UGLuaLLM.RateLimiter.configure(provider, opts) takes
+requests_per_minute, tokens_per_minute, request_burst, token_burst, and `now`
+and `sleep` hooks. acquire(provider, tokens) waits and returns
+{ ok, wait, limit, waited }; check(provider, tokens) only reports. `limit` names
+the bucket that bound the call. A request larger than a bucket returns at once
+with over_capacity rather than waiting for a refill that cannot arrive. The bundled `get_weather` and
 `calculator` are opt-in since 0.3.0: call
 `ToolRegistry.register_standard_tools()` before `ToolRegistry.collection`
 resolves them.

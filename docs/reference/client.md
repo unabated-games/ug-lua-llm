@@ -161,6 +161,24 @@ if response.structured_applied then
 end
 ```
 
+### Choosing which tool runs
+
+`tool_choice` takes `"auto"`, `"required"` (or `"any"`), `"none"`, or a table
+naming one tool. Every provider spells this differently and the option is
+translated for each: a bare string on OpenAI-compatible services,
+`{ type = ... }` on Claude, and `toolConfig.functionCallingConfig` on Gemini,
+where naming a tool becomes `allowedFunctionNames`.
+
+```lua
+client:chat_with_tools(messages, tools, { tool_choice = "required" })
+client:chat_with_tools(messages, tools, { tool_choice = { name = "get_weather" } })
+client:chat_with_tools(messages, tools, { tool_choice = "none" })
+```
+
+`"none"` forbids tool use for that turn, which is worth stating because it is
+the case where a silently dropped option does the opposite of what was asked.
+A value no provider recognizes is left out rather than guessed at.
+
 ### Schemas and tools together
 
 The two do not always compose, and how they fail depends on where the provider

@@ -380,3 +380,78 @@ describe("reasoning means the same thing on the escape hatch", function()
     assert.is_nil(payload_for({}).reasoning)
   end)
 end)
+
+describe("tool_choice reaches every provider in its own spelling", function()
+  local tools = { { name = "get_time", description = "d",
+    parameters = { type = "object", properties = {} } } }
+
+  local function payload_for(provider, choice, body)
+    local client = LLM.new(provider, { api_key = "k", max_tokens = 64 })
+    local sent
+    client.provider.http.post = function(_, _, p)
+      sent = p
+      return { status = 200, body = body }
+    end
+    client:chat_with_tools({ { role = "user", content = "hi" } }, tools,
+      { tool_choice = choice })
+    return sent
+  end
+
+  local CLAUDE = { content = { { type = "text", text = "x" } }, stop_reason = "end_turn" }
+  local GEMINI = { candidates = { { content = { parts = { { text = "x" } } },
+    finishReason = "STOP" } } }
+
+  it("translates Claude's object form", function()
+    -- Nothing translated this, so tool_choice never reached the payload and a
+    -- caller forbidding tool use had tools called anyway.
+    assert.are.same({ type = "none" }, payload_for("claude", "none", CLAUDE).tool_choice)
+    assert.are.same({ type = "any" }, payload_for("claude", "required", CLAUDE).tool_choice)
+    assert.are.same({ type = "tool", name = "get_time" },
+      payload_for("claude", { name = "get_time" }, CLAUDE).tool_choice)
+  end)
+
+  it("translates Gemini's nested toolConfig", function()
+    assert.are.same({ functionCallingConfig = { mode = "NONE" } },
+      payload_for("gemini", "none", GEMINI).toolConfig)
+    assert.are.same({ functionCallingConfig = { mode = "ANY",
+      allowedFunctionNames = { "get_time" } } },
+      payload_for("gemini", { name = "get_time" }, GEMINI).toolConfig)
+  end)
+
+  it("leaves an unrecognized choice out rather than guessing", function()
+    assert.is_nil(payload_for("claude", "nonsense", CLAUDE).tool_choice)
+    assert.is_nil(payload_for("gemini", "nonsense", GEMINI).toolConfig)
+  end)
+end)
+
+describe("a library option nested in request_options", function()
+  local function attempt(request_options)
+    local client = LLM.new("openai", { api_key = "k", max_tokens = 64 })
+    client.provider.http.post = function(_, _, sent)
+      return { status = 200, body = { status = "completed", output = {},
+        _sent = sent } }
+    end
+    return client:chat({ { role = "user", content = "hi" } },
+      { request_options = request_options })
+  end
+
+  it("is refused rather than forwarded raw", function()
+    -- request_options reaches the provider untouched, which is what makes a
+    -- name this library also owns dangerous inside it: the ladder consumes the
+    -- top-level one, so a nested copy is forwarded and the provider rejects a
+    -- parameter the caller was told to use.
+    local result, err, details = attempt({ reasoning = "high" })
+    assert.is_nil(result)
+    assert.are.equal("library_option_in_request_options", details.code)
+    assert.is_truthy(err:find("request_options", 1, true))
+  end)
+
+  it("lets a provider's own object shape through", function()
+    -- An object is this provider's vocabulary, not ours, so the caller means it.
+    assert.is_table(attempt({ reasoning = { effort = "high" } }))
+  end)
+
+  it("does not interfere with ordinary passthrough", function()
+    assert.is_table(attempt({ top_p = 0.5 }))
+  end)
+end)

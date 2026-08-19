@@ -132,6 +132,40 @@ function ClaudeProvider:chat(messages, options)
 end
 
 -- Process a chat message with tools
+-- Claude spells tool choice as an object with a type, not OpenAI's bare string,
+-- and nothing translated it -- so `tool_choice` never reached the payload at
+-- all. A caller forcing a tool got a free choice, and one asking for "none" to
+-- forbid tool use had tools called anyway with nothing to say otherwise.
+local TOOL_CHOICE_TYPE = {
+  auto = "auto",
+  required = "any",
+  any = "any",
+  none = "none",
+}
+
+local function tool_choice(choice)
+  if choice == nil then return nil end
+
+  if type(choice) == "string" then
+    local kind = TOOL_CHOICE_TYPE[choice:lower()]
+    return kind and { type = kind } or nil
+  end
+
+  if type(choice) == "table" then
+    -- Already Claude-shaped, including the forced-tool form used to carry a
+    -- JSON schema, so it travels untouched.
+    if choice.type and (choice.type == "tool" or TOOL_CHOICE_TYPE[choice.type]) then
+      return choice
+    end
+    -- OpenAI's { type = "function", function = { name = ... } }.
+    local named = choice.name or (type(choice["function"]) == "table" and
+      choice["function"].name)
+    if named then return { type = "tool", name = named } end
+  end
+
+  return nil
+end
+
 function ClaudeProvider:chat_with_tools(messages, tools, options)
   options = options or {}
   local url = self.config.base_url .. "/messages"
@@ -141,6 +175,9 @@ function ClaudeProvider:chat_with_tools(messages, tools, options)
     return nil, self:validation_error(payload_err, "invalid_options")
   end
   payload.tools = Tool.to_provider_format(tools, "claude")
+
+  local choice = tool_choice(options.tool_choice)
+  if choice and payload.tool_choice == nil then payload.tool_choice = choice end
 
   local response, err, details = self.http:post(url, payload)
   if err or not response then
