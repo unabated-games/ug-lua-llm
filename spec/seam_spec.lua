@@ -494,3 +494,52 @@ describe("embeddings speak each provider's own vocabulary", function()
     assert.are.equal("models/gemini-embedding-001", sent.requests[1].model)
   end)
 end)
+
+describe("echoing a provider's own structure back to it", function()
+  local ToolRegistry = require("ug-lua-llm.tools.registry")
+  local JSON = require("ug-lua-llm.utils.json")
+
+  it("marks an empty container as an array on both JSON backends", function()
+    -- An empty JSON array and an empty JSON object decode to the same Lua
+    -- table. Re-encoding a decoded `"summary": []` produced `{}`, and the
+    -- Responses API rejects that: "expected an array of objects, but got an
+    -- object instead". Dropping the key fails the other way; it is required.
+    assert.are.equal('{"s":[]}', JSON.encode({ s = JSON.empty_array() }))
+    -- The default for an empty table is still an object, which JSON Schema
+    -- `properties` and empty tool arguments depend on.
+    assert.are.equal('{"p":{}}', JSON.encode({ p = {} }))
+  end)
+
+  it("echoes the Responses output items rather than rebuilding them", function()
+    -- A reasoning model returns a `reasoning` item carrying encrypted_content
+    -- beside the call. Rebuilding kept only the call, so the chain of thought
+    -- was discarded and re-derived from scratch every round.
+    local output = {
+      { type = "reasoning", id = "rs_1", encrypted_content = "ENC", summary = {} },
+      { type = "function_call", call_id = "call_1", name = "f", arguments = "{}" },
+    }
+    local messages = ToolRegistry._prepare_tool_response_messages(
+      { { role = "user", content = "go" } },
+      { { id = "call_1", name = "f", arguments = {}, result = { ok = true },
+          result_str = '{"ok":true}' } },
+      "openai", { output = output }, true)
+
+    assert.are.equal("reasoning", messages[2].type)
+    assert.are.equal("ENC", messages[2].encrypted_content)
+    assert.are.equal("function_call", messages[3].type)
+    assert.are.equal("function_call_output", messages[4].type)
+    -- The required-but-empty field survives as an array, not an object.
+    assert.are.equal('[]', JSON.encode(messages[2].summary))
+    -- The call is echoed once, not echoed and rebuilt.
+    assert.are.equal(4, #messages)
+  end)
+
+  it("still builds the exchange when no output items were captured", function()
+    local messages = ToolRegistry._prepare_tool_response_messages(
+      { { role = "user", content = "go" } },
+      { { id = "call_1", name = "f", arguments = {}, result_str = "{}" } },
+      "openai", nil, true)
+    assert.are.equal("function_call", messages[2].type)
+    assert.are.equal("call_1", messages[2].call_id)
+  end)
+end)

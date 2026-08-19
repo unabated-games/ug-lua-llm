@@ -55,6 +55,17 @@ function JSON.string_value(value)
   return nil
 end
 
+-- An empty JSON array and an empty JSON object decode to the same Lua table,
+-- so a decoded `[]` re-encodes as `{}` and a provider that requires an array
+-- rejects it. This marks a table to be written as an array whatever it holds,
+-- which is what echoing a provider's own structure back to it needs.
+function JSON.empty_array()
+  if backend_name == "cjson" and backend.empty_array ~= nil then
+    return backend.empty_array
+  end
+  return setmetatable({}, { __jsontype = "array" })
+end
+
 function JSON.encode(value)
   if backend_name == "cjson" then return backend.encode(value) end
   -- cjson, the original backend, encodes an empty Lua table as an object.
@@ -68,7 +79,14 @@ function JSON.encode(value)
     seen[item] = true
     local copy = {}
     for key, child in pairs(item) do copy[key] = prepare(child, seen) end
-    if next(copy) == nil then setmetatable(copy, { __jsontype = "object" }) end
+    if next(copy) == nil then
+      -- Empty defaults to an object, except where the caller has said
+      -- otherwise: cloning here would otherwise discard an explicit array
+      -- marking, which is the one case the default is wrong for.
+      local marked = getmetatable(item)
+      local kind = type(marked) == "table" and marked.__jsontype or nil
+      setmetatable(copy, { __jsontype = kind == "array" and "array" or "object" })
+    end
     seen[item] = nil
     return copy
   end

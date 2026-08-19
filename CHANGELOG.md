@@ -113,6 +113,20 @@ OpenAI tool calling never produced a final answer.
   an object, but got a string instead"*. A normalized level is now translated
   there as it is everywhere else, and a caller who supplies the provider's own
   object still has it passed through untouched.
+- **OpenAI tool exchanges discarded the model's reasoning between rounds.** The
+  follow-up rebuilt a `function_call` item from the tool's name and arguments,
+  so a reasoning model's `reasoning` item — which carries its `encrypted_content`
+  alongside the call — was dropped and the chain of thought re-derived from
+  scratch on every round. The model's own `output` items are echoed back now,
+  which is the same rule Claude's content blocks and Gemini's parts already
+  follow: echo what the provider sent, do not rebuild it. Three providers, three
+  different fields, one rule.
+- **`JSON.empty_array()`**, because echoing a provider's structure back requires
+  the round trip to be faithful and it was not: an empty JSON array and an empty
+  JSON object decode to the same Lua table, so a decoded `"summary": []`
+  re-encoded as `{}` and was rejected as the wrong type. Empty tables still
+  default to objects, which JSON Schema `properties` and empty tool arguments
+  depend on; the marking is explicit and now survives encoding on both backends.
 - **Embeddings were broken on two of the four providers that have them, and
   claimed on one that has none.** The OpenAI-compatible adapter fell back to a
   single hardcoded OpenAI model name for every service it serves, so Mistral was

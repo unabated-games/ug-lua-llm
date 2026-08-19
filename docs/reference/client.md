@@ -114,10 +114,13 @@ end, {
 for is reported, and nothing runs. The caller's own `messages` table is never
 mutated.
 
-Follow-up turns preserve whatever the provider used to link a call to its
-result: Claude's original `tool_use` blocks, and Gemini's own parts including
-the `thoughtSignature` it signs each `functionCall` with. A turn rebuilt from
-the tool's name and arguments loses that linkage and is rejected.
+Follow-up turns echo whatever the provider sent rather than rebuilding it:
+Claude's original `tool_use` blocks, Gemini's parts including the
+`thoughtSignature` it signs each `functionCall` with, and OpenAI's `output`
+items including the `reasoning` item that carries a reasoning model's
+`encrypted_content`. Three providers, three different fields, one rule — a turn
+rebuilt from the tool's name and arguments loses that linkage, and is either
+rejected outright or silently discards the model's reasoning between rounds.
 
 `ToolRegistry.register_standard_tools()` is required before `get_weather` and
 `calculator` resolve. They were registered when the module loaded before 0.3.0,
