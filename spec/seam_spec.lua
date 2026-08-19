@@ -39,10 +39,18 @@ local BODIES = {
       status = "completed",
       model = "gpt-test",
       output = {
+        -- Real replies lead with a reasoning item the caller never sees. It is
+        -- here because it is on the wire, not because anything reads it: an
+        -- extractor that took output[1] on faith would return its contents as
+        -- the answer.
+        { type = "reasoning", id = "rs_1", encrypted_content = "gAAAAAB..." },
         { type = "message", content = { { type = "output_text", text = "hello" } } },
         { type = "function_call", call_id = "call_1", name = "f", arguments = '{"a":1}' },
       },
-      usage = { input_tokens = 5, output_tokens = 7, total_tokens = 12 },
+      usage = {
+        input_tokens = 5, output_tokens = 7, total_tokens = 12,
+        input_tokens_details = { cached_tokens = 0 },
+      },
     },
     finish_reason = "tool_calls",
   },

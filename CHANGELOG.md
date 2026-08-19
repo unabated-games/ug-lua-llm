@@ -106,6 +106,20 @@ OpenAI tool calling never produced a final answer.
 
 ### Changed
 
+- **The rate limiter takes its clock as a parameter.** `now` and `sleep` are
+  configurable, defaulting to the wall clock and a real sleep, which makes the
+  waiting behaviour testable without waiting — the suite covers refill, burst,
+  and both failure modes in 13ms and cannot flake on a slow machine. `now` is
+  called once at configuration, so a clock reporting the wrong unit fails there
+  with a clear message rather than producing a limiter that waits a thousand
+  times too long. Alongside that: `acquire` reports which bucket bound the call,
+  a `sleep` hook that cannot pause is reported as `stalled` instead of spun on,
+  one that raises cannot corrupt the limiter, `waited` is measured from the
+  clock rather than assumed from the delays requested, a clock that goes
+  backwards no longer manufactures tokens, and `request_burst`/`token_burst`
+  default to their rates so existing behaviour is unchanged. The unused
+  `Bucket:wait_and_acquire` is gone; it decremented without re-checking and
+  could take a bucket negative.
 - **A tool exchange reports what happened across all of it.** The turn that
   finally answers asks for no tools, so a caller reading `tool_calls` on it saw
   nothing in exactly the case where tools had been used successfully. The final
