@@ -311,7 +311,12 @@ function ClaudeProvider:stream_chat(messages, callback, options)
     return formatted_response
   end
 
-  return current_response
+  -- Normalized like any other reply. The accumulator builds Anthropic's own
+  -- shape, so returning it directly gave the caller `stop_reason` instead of
+  -- `finish_reason`, no `provider` -- which breaks the documented
+  -- `Tool.parse_tool_calls(response)` -- and a nil `text` against a contract
+  -- that says it is always a string.
+  return Response.normalize("claude", current_response)
 end
 
 -- Stream a chat response with tools
@@ -431,7 +436,33 @@ function ClaudeProvider:stream_chat_with_tools(messages, tools, callback, option
     return response
   end
 
-  return current_response
+  -- Rebuild Anthropic's own content blocks before normalizing. The accumulator
+  -- keeps text as a string and tool calls beside it, but a real reply is one
+  -- array of blocks -- which is the shape the normalizer reads tool calls from,
+  -- and the shape a tool follow-up echoes back. Leaving it as a string dropped
+  -- the tool calls on normalization and would have sent a string where the
+  -- follow-up expects blocks.
+  local blocks = {}
+  if type(current_response.content) == "string" and current_response.content ~= "" then
+    blocks[#blocks + 1] = { type = "text", text = current_response.content }
+  elseif type(current_response.content) == "table" then
+    for _, block in ipairs(current_response.content) do
+      blocks[#blocks + 1] = block
+    end
+  end
+  for _, call in ipairs(current_response.tool_calls or {}) do
+    blocks[#blocks + 1] = {
+      type = "tool_use",
+      id = call.id,
+      name = call.name,
+      input = call.input or {},
+    }
+  end
+  current_response.content = blocks
+
+  -- Normalized for the same reason as the streaming chat path: the
+  -- accumulator holds Anthropic's own shape, not the caller's contract.
+  return Response.normalize("claude", current_response)
 end
 
 -- Helper method to convert generic messages to Claude format

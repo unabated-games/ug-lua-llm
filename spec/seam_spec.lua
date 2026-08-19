@@ -543,3 +543,68 @@ describe("echoing a provider's own structure back to it", function()
     assert.are.equal("call_1", messages[2].call_id)
   end)
 end)
+
+describe("a streamed reply satisfies the same contract as a whole one", function()
+  -- The accumulators built each provider's own shape and returned it directly,
+  -- so a streamed Claude reply carried `stop_reason` instead of `finish_reason`,
+  -- no `provider` -- which breaks the documented one-argument
+  -- `Tool.parse_tool_calls(response)` -- and a nil `text` against a contract
+  -- saying it is always a string.
+  local Claude = require("ug-lua-llm.providers.claude")
+  local HttpStreaming = require("ug-lua-llm.utils.http_streaming")
+
+  local function streamed(events)
+    local provider = Claude.new({ api_key = "k" })
+    local original = HttpStreaming.stream_claude
+    HttpStreaming.stream_claude = function(_, _, _, on_chunk)
+      for _, event in ipairs(events) do on_chunk(event) end
+      return true
+    end
+    local result = provider:stream_chat_with_tools(
+      { { role = "user", content = "hi" } },
+      { { name = "get_weather", description = "d",
+          parameters = { type = "object", properties = {} } } },
+      function() end)
+    HttpStreaming.stream_claude = original
+    return result
+  end
+
+  local EVENTS = {
+    { type = "content_block_start", index = 0,
+      content_block = { type = "text", text = "" } },
+    { type = "content_block_delta", index = 0,
+      delta = { type = "text_delta", text = "Looking that up." } },
+    { type = "content_block_start", index = 1,
+      content_block = { type = "tool_use", id = "call_1", name = "get_weather" } },
+    { type = "content_block_delta", index = 1,
+      delta = { type = "input_json_delta", partial_json = '{"city":' } },
+    { type = "content_block_delta", index = 1,
+      delta = { type = "input_json_delta", partial_json = '"Paris"}' } },
+    { type = "message_delta", delta = { stop_reason = "tool_use" } },
+  }
+
+  it("normalizes provider, text and finish reason", function()
+    local result = streamed(EVENTS)
+    assert.are.equal("claude", result.provider)
+    assert.are.equal("Looking that up.", result.text)
+    assert.are.equal("tool_use", result.finish_reason)
+  end)
+
+  it("keeps the tool call reachable through the documented parser", function()
+    -- parse_tool_calls infers the provider from the response, so a missing
+    -- `provider` made the documented single-argument form raise.
+    local result = streamed(EVENTS)
+    local parsed = LLM.Tool.parse_tool_calls(result)
+    assert.are.equal(1, #parsed)
+    assert.are.equal("get_weather", parsed[1].name)
+  end)
+
+  it("leaves content as blocks a tool follow-up can echo", function()
+    -- The follow-up sends assistant_response.content straight back to
+    -- Anthropic, which requires blocks; a string would be the wrong type.
+    local result = streamed(EVENTS)
+    assert.is_table(result.content)
+    assert.are.equal("text", result.content[1].type)
+    assert.are.equal("tool_use", result.content[2].type)
+  end)
+end)

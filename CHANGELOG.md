@@ -113,6 +113,22 @@ OpenAI tool calling never produced a final answer.
   an object, but got a string instead"*. A normalized level is now translated
   there as it is everywhere else, and a caller who supplies the provider's own
   object still has it passed through untouched.
+- **Streaming replies did not satisfy the normalized contract on Claude.** The
+  accumulator built Anthropic's own shape and returned it directly, so a
+  streamed reply carried `stop_reason` rather than `finish_reason`, no
+  `provider` — which made the documented one-argument
+  `Tool.parse_tool_calls(response)` raise — and `text` as `nil` against a
+  contract saying it is always a string, losing the model's prose entirely when
+  it spoke before calling a tool. Both streaming paths normalize now, and the
+  accumulator rebuilds Anthropic's content blocks, which is both the shape the
+  normalizer reads tool calls from and the shape a tool follow-up echoes back;
+  a string would have been the wrong type there.
+- **Streaming sent the retired token field on Chat Completions.** 0.3.0 fixed
+  `max_tokens` to `max_completion_tokens` in the non-streaming builder and
+  missed the two streaming ones that post to the same endpoint, so current
+  models rejected the request — and the silent fallback to a non-streaming call
+  reported success, so a caller who asked to stream got a whole reply and no
+  signal that streaming had failed.
 - **OpenAI tool exchanges discarded the model's reasoning between rounds.** The
   follow-up rebuilt a `function_call` item from the tool's name and arguments,
   so a reasoning model's `reasoning` item — which carries its `encrypted_content`

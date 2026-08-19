@@ -491,7 +491,12 @@ function OpenAIProvider:stream_chat(messages, callback, options)
   local payload = {
     model = options.model or self.config.model,
     messages = messages,
-    max_tokens = options.max_tokens or self.config.max_tokens,
+    -- Chat Completions replaced max_tokens with max_completion_tokens and
+    -- current models reject the old name. The non-streaming builder was fixed
+    -- in 0.3.0; these two send the same payload to the same endpoint and were
+    -- missed, so streaming was rejected and quietly fell back to a non-streaming
+    -- request that reported success.
+    max_completion_tokens = options.max_tokens or self.config.max_tokens,
     temperature = options.temperature or self.config.temperature,
     stream = true
   }
@@ -546,7 +551,12 @@ function OpenAIProvider:stream_chat_with_tools(messages, tools, callback, option
   local payload = {
     model = options.model or self.config.model,
     messages = messages,
-    max_tokens = options.max_tokens or self.config.max_tokens,
+    -- Chat Completions replaced max_tokens with max_completion_tokens and
+    -- current models reject the old name. The non-streaming builder was fixed
+    -- in 0.3.0; these two send the same payload to the same endpoint and were
+    -- missed, so streaming was rejected and quietly fell back to a non-streaming
+    -- request that reported success.
+    max_completion_tokens = options.max_tokens or self.config.max_tokens,
     temperature = options.temperature or self.config.temperature,
     tools = formatted_tools,
     tool_choice = options.tool_choice or "auto",
