@@ -65,6 +65,12 @@ runner.
 
 - **Normalized by default.** Read the same fields across every provider without
   losing access to the original response.
+- **One schema, every provider.** Ask for structured output with `json_schema`
+  and read `response.parsed`; the schema is carried in whatever shape the
+  provider takes, including a forced tool call on Claude.
+- **Reasoning is an option, not a dialect.** `reasoning = false` for latency,
+  `"high"` for hard problems, translated per provider and reported honestly
+  when a model cannot comply.
 - **Modern provider APIs.** OpenAI Responses, Gemini Interactions, Claude
   extended thinking, multimodal content, structured outputs, reasoning options,
   and safe request-option passthrough.

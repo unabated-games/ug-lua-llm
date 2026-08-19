@@ -6,7 +6,7 @@
     <title>ug-lua-llm — a simple Lua interface to LLM models</title>
     <meta
       name="description"
-      content="A unified Lua 5.1–5.4 client for cloud LLM APIs, local Ollama models, and any OpenAI-compatible endpoint. Chat, streaming, tools, and embeddings behind one normalized API."
+      content="A unified Lua 5.1–5.4 client for cloud LLM APIs, local Ollama models, and any OpenAI-compatible endpoint. Chat, streaming, tools, embeddings, structured output, and reasoning control behind one normalized API."
     />
     <meta name="theme-color" content="#071523" />
     <meta name="color-scheme" content="dark" />
@@ -19,7 +19,7 @@
     <meta property="og:title" content="ug-lua-llm — a simple Lua interface to LLM models" />
     <meta
       property="og:description"
-      content="Chat, streaming, tools, and embeddings across cloud providers, local Ollama, and any OpenAI-compatible endpoint. Lua 5.1–5.4, MIT licensed."
+      content="Chat, streaming, tools, embeddings, structured output, and reasoning control across cloud providers, local Ollama, and any OpenAI-compatible endpoint. Lua 5.1–5.4, MIT licensed."
     />
     <meta property="og:url" content="https://unabated-games.github.io/ug-lua-llm/" />
     <meta property="og:image" content="https://unabated-games.github.io/ug-lua-llm/assets/og-image.png" />
@@ -87,10 +87,10 @@
           <h1>A <em>simple</em> Lua interface to LLM models</h1>
 
           <p class="lede">
-            Chat, streaming, tool calls, and embeddings across cloud providers,
-            local Ollama models, and any OpenAI-compatible endpoint — behind a
-            single normalized API, with the provider's own response always
-            kept intact.
+            Chat, streaming, tools, embeddings, structured output, and
+            reasoning control across cloud providers, local Ollama models, and
+            any OpenAI-compatible endpoint — behind a single normalized API,
+            with the provider's own response always kept intact.
           </p>
 
           <div class="cta-row">
@@ -143,13 +143,33 @@
             </article>
 
             <article class="cap">
-              <h3>Tools and function calling</h3>
+              <h3>Tools that finish the job</h3>
               <p>
                 Define tools once with JSON Schema. The registry normalizes
-                calls across providers, runs your handlers, and continues the
-                conversation for you.
+                calls across providers, runs your handlers, and keeps going
+                when the model needs a second tool to answer the first.
               </p>
-              <code class="sig">client:chat_with_tools(messages, tools)</code>
+              <code class="sig">{ tools = tools, max_tool_rounds = 8 }</code>
+            </article>
+
+            <article class="cap">
+              <h3>Structured output</h3>
+              <p>
+                Ask for a JSON Schema and read the decoded object back. One
+                schema covers every provider, including Claude, which has no
+                response-format field and needs a forced tool call instead.
+              </p>
+              <code class="sig">client:chat(m, { json_schema = s })</code>
+            </article>
+
+            <article class="cap">
+              <h3>Reasoning you control</h3>
+              <p>
+                Turn thinking down for latency, or up for hard problems, with
+                one option instead of four provider dialects. A model that
+                cannot comply still answers, and says so.
+              </p>
+              <code class="sig">client:chat(m, { reasoning = false })</code>
             </article>
 
             <article class="cap">
@@ -159,7 +179,7 @@
                 Gemini, Mistral, Ollama, or DeepSeek, and read them back in one
                 result shape.
               </p>
-              <code class="sig">embeddings:embed({ "first", "second" })</code>
+              <code class="sig">embeddings:embed({ "first", "last" })</code>
             </article>
 
             <article class="cap">
@@ -169,7 +189,7 @@
                 and test the whole surface on your own machine before a single
                 credential exists.
               </p>
-              <code class="sig">llm.new("ollama", { model = "llama3.2" })</code>
+              <code class="sig">llm.new("ollama"):chat(messages)</code>
             </article>
 
             <article class="cap">
@@ -179,7 +199,17 @@
                 headers, cancellation, lifecycle hooks, and request IDs.
                 Credentials never reach your logs.
               </p>
-              <code class="sig">local ok, err, details = client:chat(m)</code>
+              <code class="sig">local _, err, details = client:chat(m)</code>
+            </article>
+
+            <article class="cap">
+              <h3>Compatibility you can verify</h3>
+              <p>
+                Declare what a custom server supports, then run the bundled
+                conformance suite against its real models, chat, and SSE
+                endpoints to find out what it actually does.
+              </p>
+              <code class="sig">lua scripts/conformance.lua</code>
             </article>
           </div>
         </div>
@@ -202,6 +232,8 @@
               <button class="tab" role="tab" id="tab-stream" aria-controls="panel-stream" aria-selected="false" tabindex="-1">stream</button>
               <button class="tab" role="tab" id="tab-tools" aria-controls="panel-tools" aria-selected="false" tabindex="-1">tools</button>
               <button class="tab" role="tab" id="tab-embed" aria-controls="panel-embed" aria-selected="false" tabindex="-1">embeddings</button>
+              <button class="tab" role="tab" id="tab-schema" aria-controls="panel-schema" aria-selected="false" tabindex="-1">structured</button>
+              <button class="tab" role="tab" id="tab-reasoning" aria-controls="panel-reasoning" aria-selected="false" tabindex="-1">reasoning</button>
               <button class="tab" role="tab" id="tab-errors" aria-controls="panel-errors" aria-selected="false" tabindex="-1">errors</button>
             </div>
 
@@ -273,6 +305,47 @@ end</pre>
 local result = assert(embeddings:embed({ "first", "second" }))</pre>
               <p class="panel-note">
                 Available for OpenAI, Gemini, Mistral, Ollama, and DeepSeek.
+              </p>
+            </div>
+
+            <div class="panel" role="tabpanel" id="panel-schema" aria-labelledby="tab-schema" tabindex="0" hidden>
+<pre data-lua>local response = assert(client:chat(messages, {
+  json_schema = {
+    name = "npc_reply",
+    schema = {
+      type = "object",
+      properties = {
+        line = { type = "string" },
+        mood = { type = "string", enum = { "calm", "angry" } },
+      },
+      required = { "line", "mood" },
+    },
+  },
+}))
+
+print(response.parsed.line, response.parsed.mood)</pre>
+              <p class="panel-note">
+                <code>parsed</code> holds the decoded object and
+                <code>text</code> the raw JSON. A model that cannot honour the
+                schema still answers;
+                <code>structured_applied</code> tells you which happened.
+              </p>
+            </div>
+
+            <div class="panel" role="tabpanel" id="panel-reasoning" aria-labelledby="tab-reasoning" tabindex="0" hidden>
+<pre data-lua>-- Dialogue wants speed, not deliberation.
+local reply = assert(client:chat(messages, { reasoning = false }))
+
+print(reply.usage.reasoning_tokens)  -- 0
+print(reply.reasoning_applied)       -- true when the model complied
+
+-- And when a problem earns the thinking:
+local solved = assert(client:chat(messages, { reasoning = "high" }))</pre>
+              <p class="panel-note">
+                One option, however the provider spells it. Asking for less
+                reasoning never turns a working request into an error, and
+                <code>capabilities().reasoning_control</code> says what a
+                provider can honour before you ask.
               </p>
             </div>
 

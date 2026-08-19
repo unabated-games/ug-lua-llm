@@ -20,6 +20,8 @@ Use `--help` with any example that uses the shared client factory.
 - **conversation_chat.lua** — Interactive multi-turn chat with message history.
 - **tool_calling.lua** — Registers and executes one local tool, then requests the final answer.
 - **tool_registry_example.lua** — Advanced registry, custom-tool, and collection features.
+- **structured_output.lua** — Requests a JSON Schema and reads the decoded object from `response.parsed`.
+- **reasoning_control.lua** — Compares default, minimized, and raised reasoning, with the token cost of each.
 - **ollama_chat.lua** — One local, non-streaming Ollama request.
 - **ollama_streaming.lua** — Streams from a selected local Ollama model.
 - **ollama_tool_calling.lua** — Runs a local tool with a tool-capable Ollama model.

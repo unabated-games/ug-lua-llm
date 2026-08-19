@@ -50,6 +50,19 @@
     function (list) {
       var tabs = Array.prototype.slice.call(list.querySelectorAll('[role="tab"]'));
 
+      // Narrow screens scroll this strip. Say so, on whichever side still has
+      // tabs to reveal; a strip that fits shows no fade at all.
+      function markOverflow() {
+        var slack = list.scrollWidth - list.clientWidth;
+        var at = list.scrollLeft;
+        list.classList.toggle("fade-start", slack > 1 && at > 1);
+        list.classList.toggle("fade-end", slack > 1 && at < slack - 1);
+      }
+
+      list.addEventListener("scroll", markOverflow, { passive: true });
+      window.addEventListener("resize", markOverflow);
+      markOverflow();
+
       function select(tab, moveFocus) {
         tabs.forEach(function (other) {
           var chosen = other === tab;
@@ -59,6 +72,11 @@
           if (panel) panel.hidden = !chosen;
         });
         if (moveFocus) tab.focus();
+        // A tab chosen with the arrow keys may be off-screen on a phone.
+        if (tab.scrollIntoView) {
+          tab.scrollIntoView({ block: "nearest", inline: "nearest" });
+        }
+        markOverflow();
       }
 
       tabs.forEach(function (tab, index) {

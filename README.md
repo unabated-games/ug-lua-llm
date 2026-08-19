@@ -30,8 +30,11 @@ print(response.text)
 - One normalized API across OpenAI, Claude, Gemini, Grok, Groq, OpenRouter,
   Ollama, DeepSeek, Mistral, and custom endpoints.
 - Local-first development through Ollama, without a cloud key.
-- Real SSE streaming, normalized tool calls, embeddings, and provider-native
-  escape hatches.
+- Real SSE streaming, multi-round tool calling, and embeddings.
+- Structured output from one JSON Schema, whatever shape the provider wants it
+  in, with the decoded object on `response.parsed`.
+- Reasoning control in a single option, translated per provider, degrading
+  rather than failing where a model cannot comply.
 - Structured, redacted errors plus retries, cancellation, lifecycle hooks, and
   endpoint conformance checks.
 - Tested on Lua 5.1, 5.2, 5.3, and 5.4.
