@@ -1,5 +1,5 @@
 local UGLuaLLM = {
-  _VERSION = '0.3.0',
+  _VERSION = '0.4.0',
   _DESCRIPTION = 'Unified Lua client for cloud LLM APIs, local Ollama models, and OpenAI-compatible endpoints',
   _LICENSE = 'MIT',
 }

@@ -48,17 +48,39 @@ function ClaudeProvider.new(config)
   return provider
 end
 
--- List available models (Claude doesn't have an equivalent endpoint, so we hardcode models)
-function ClaudeProvider:list_models()
-  return {
-    { id = "claude-opus-4-6", name = "Claude Opus 4.6" },
-    { id = "claude-sonnet-4-6", name = "Claude Sonnet 4.6" },
-    { id = "claude-haiku-4-5-20251001", name = "Claude Haiku 4.5" },
-    { id = "claude-opus-4-5", name = "Claude Opus 4.5" },
-    { id = "claude-sonnet-4-5", name = "Claude Sonnet 4.5" },
-    { id = "claude-sonnet-4-20250514", name = "Claude Sonnet 4" },
-    { id = "claude-opus-4-20250514", name = "Claude Opus 4" },
-  }
+-- List available models.
+--
+-- This was hardcoded on the premise that Anthropic has no models endpoint. It
+-- does -- GET /v1/models, with per-model capability metadata -- and the
+-- hardcoded list had rotted in the only direction such a list can: it named
+-- models that no longer resolve and omitted the entire current generation.
+function ClaudeProvider:list_models(options)
+  options = options or {}
+  local url = self.config.base_url .. "/models?limit=" .. (options.page_size or 100)
+
+  local response, err, details = self.http:get(url)
+  if err or not response then
+    return nil, self:transport_error(err, details, "Failed to fetch models")
+  end
+  if response.status ~= 200 then
+    return nil, self:format_error(response, "Failed to fetch models")
+  end
+
+  local models = {}
+  for _, model in ipairs((response.body and response.body.data) or {}) do
+    models[#models + 1] = {
+      id = model.id,
+      name = model.display_name or model.id,
+      created_at = model.created_at,
+      -- Anthropic reports what each model can do, including which effort
+      -- levels it accepts; keep it rather than flattening to id and name.
+      capabilities = model.capabilities,
+      max_input_tokens = model.max_input_tokens,
+      max_tokens = model.max_tokens,
+      raw = model,
+    }
+  end
+  return models
 end
 
 -- Complete a prompt (Claude uses messages API for everything, so we translate)
@@ -85,6 +107,14 @@ function ClaudeProvider:_build_payload(messages, options)
   }
 
   if system then payload.system = system end
+
+  -- Current models control thinking with an effort level rather than a token
+  -- budget, and reject the budget spelling outright. Forwarded here so the
+  -- normalized `reasoning` option -- and a caller writing Anthropic's own
+  -- field -- both reach the wire.
+  if options.output_config ~= nil then
+    payload.output_config = options.output_config
+  end
 
   -- Extended thinking: when enabled, temperature must be 1 (or omitted)
   if options.thinking then
@@ -208,6 +238,8 @@ function ClaudeProvider:stream_complete(prompt, callback, options)
     -- Convert chat format to completion format for callback
     if delta and delta.content then
       local text_delta = {
+        content = delta.content,
+        text = delta.content,
         choices = {
           {
             text = delta.content,
@@ -285,6 +317,14 @@ function ClaudeProvider:stream_chat(messages, callback, options)
 
   if not success then
     -- Fall back to non-streaming if real streaming fails
+    -- A caller who asked not to fall back wants the streaming failure, not a
+    -- whole reply that hides it. Only the compatible family honoured this, so
+    -- the bundled conformance runner -- whose whole job is detecting broken
+    -- SSE -- reported streaming OK on the other three: the fallback's single
+    -- callback counts as a chunk.
+    if options and options.stream_fallback == false then
+      return nil, self:transport_error(_err, nil, "Streaming request failed")
+    end
     local response, fallback_err, details = self:chat(messages, options)
     if fallback_err or not response then
       return nil, fallback_err, details
@@ -308,7 +348,10 @@ function ClaudeProvider:stream_chat(messages, callback, options)
       delta = true
     }, formatted_response)
 
-    return formatted_response
+    -- Normalized for the same reason as the path below: this hand-built table
+    -- carries stop_reason rather than finish_reason, no provider, and no text.
+    -- One function, and only one of its two returns had been fixed.
+    return Response.normalize("claude", formatted_response)
   end
 
   -- Normalized like any other reply. The accumulator builds Anthropic's own
@@ -340,6 +383,11 @@ function ClaudeProvider:stream_chat_with_tools(messages, tools, callback, option
   local accumulated_content = ""
   local tool_json = {}
   local tools_by_index = {}
+  -- Thinking blocks are signed, and Anthropic requires them echoed ahead of the
+  -- tool_use blocks in the follow-up assistant turn. Rebuilding the turn from
+  -- text and tool calls alone drops the signature, so a streamed
+  -- thinking-plus-tools exchange cannot legally be continued.
+  local thinking_blocks = {}
   local current_response = {
     id = nil,
     model = options.model or self.config.model,
@@ -358,6 +406,24 @@ function ClaudeProvider:stream_chat_with_tools(messages, tools, callback, option
     if chunk then
       -- Check for tool calls (Claude streams them differently from content)
       if chunk.type == "content_block_start" and chunk.content_block and
+         chunk.content_block.type == "thinking" then
+        thinking_blocks[chunk.index or #thinking_blocks] = {
+          type = "thinking",
+          thinking = chunk.content_block.thinking or "",
+          signature = chunk.content_block.signature,
+        }
+      elseif chunk.delta and (chunk.delta.type == "thinking_delta" or
+             chunk.delta.type == "signature_delta") then
+        local block = thinking_blocks[chunk.index or 0]
+        if block then
+          if chunk.delta.thinking then
+            block.thinking = block.thinking .. chunk.delta.thinking
+          end
+          if chunk.delta.signature then
+            block.signature = (block.signature or "") .. chunk.delta.signature
+          end
+        end
+      elseif chunk.type == "content_block_start" and chunk.content_block and
          chunk.content_block.type == "tool_use" then
         local block = chunk.content_block
         local tool_call = {
@@ -411,6 +477,14 @@ function ClaudeProvider:stream_chat_with_tools(messages, tools, callback, option
 
   if not success then
     -- Fall back to non-streaming if real streaming fails
+    -- A caller who asked not to fall back wants the streaming failure, not a
+    -- whole reply that hides it. Only the compatible family honoured this, so
+    -- the bundled conformance runner -- whose whole job is detecting broken
+    -- SSE -- reported streaming OK on the other three: the fallback's single
+    -- callback counts as a chunk.
+    if options and options.stream_fallback == false then
+      return nil, self:transport_error(_err, nil, "Streaming request failed")
+    end
     local response, fallback_err, details = self:chat_with_tools(messages, tools, options)
     if fallback_err or not response then
       return nil, fallback_err, details
@@ -443,6 +517,14 @@ function ClaudeProvider:stream_chat_with_tools(messages, tools, callback, option
   -- the tool calls on normalization and would have sent a string where the
   -- follow-up expects blocks.
   local blocks = {}
+  -- Signed thinking first, in the order Anthropic sent it.
+  local thinking_indices = {}
+  for index in pairs(thinking_blocks) do thinking_indices[#thinking_indices + 1] = index end
+  table.sort(thinking_indices)
+  for _, index in ipairs(thinking_indices) do
+    blocks[#blocks + 1] = thinking_blocks[index]
+  end
+
   if type(current_response.content) == "string" and current_response.content ~= "" then
     blocks[#blocks + 1] = { type = "text", text = current_response.content }
   elseif type(current_response.content) == "table" then

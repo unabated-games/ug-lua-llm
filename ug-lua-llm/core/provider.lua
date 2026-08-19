@@ -44,9 +44,11 @@ function Provider:list_models()
   error("Provider:list_models() not implemented")
 end
 
+-- Must agree with the adapters in core/embeddings.lua. DeepSeek was left here
+-- after its adapter was removed, so a caller who checked the capability first
+-- was told yes and then got an error from the constructor.
 local EMBEDDINGS = {
   openai = true, gemini = true, mistral = true, ollama = true,
-  deepseek = true,
 }
 
 -- Return configured capabilities without making a network request. Endpoint

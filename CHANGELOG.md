@@ -6,6 +6,99 @@ Notable changes to ug-lua-llm. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-19
+
+An audit of how the library talks to each inference API, run against the real
+services rather than from memory. Everything below is a case where the code's
+model of an API disagreed with the API.
+
+**One of these is a regression introduced in 0.3.0** and is the reason to take
+this release: on the default OpenAI API, any tool round where the model spoke
+before calling a tool failed on the follow-up.
+
+### Fixed
+
+- **The OpenAI tool loop broke whenever the model spoke before calling a
+  tool.** 0.3.0 began echoing the model's own `output` items back, and marked
+  empty containers as arrays so they would survive the JSON round trip — but
+  only at the top level of each item. A `message` item nests them two deep, so
+  `content[0].annotations` re-encoded as an object and the follow-up was
+  rejected with *"expected an array of objects, but got an object instead"*. The
+  changelog entry for the schema sealer in that same release says a one-level
+  pass misses nested nodes; this was written beside it and did exactly that.
+- **`tool_choice = { name = ... }` was a 400 on OpenAI and every
+  OpenAI-compatible provider.** 0.3.0 documented the portable form and
+  translated it for Claude and Gemini, whose spellings are unusual, then passed
+  it verbatim to the family it was modelled on — which wants an object, spelled
+  differently again on each of OpenAI's two APIs, and answers a bare name with
+  `Missing required parameter: 'tool_choice.type'`.
+- **Reasoning did nothing on current Claude models.** They reject the thinking
+  budget outright — *"Use 'thinking.type.adaptive' and 'output_config.effort'"* —
+  so `reasoning` silently degraded and the documented `thinking = true` was a
+  hard failure. The ladder now asks for an effort level first and keeps the
+  budget as its next rung, so both model generations are covered.
+- **Claude's model list was hardcoded on the premise that no endpoint exists.**
+  It does. The hardcoded list had rotted the only way such a list can: it named
+  models that no longer resolve and omitted the entire current generation.
+  `list_models` reads the endpoint now and keeps the per-model capability
+  metadata, including which effort levels each model accepts.
+- **Streaming on OpenAI's Chat Completions dropped three option families and
+  reported compliance.** `stream_chat` and `stream_chat_with_tools` built
+  literal payloads carrying neither `reasoning_effort`, `response_format`, nor
+  `request_options` — the last documented to reach the provider untouched — and
+  then reported `reasoning_applied` and `structured_applied` as true for a
+  request that had contained none of them. Both now build the same payload as
+  the non-streaming path.
+- **Gemini rejected tool schemas written for OpenAI.** Its restricted subset of
+  JSON Schema was applied to response schemas and not to tool parameters, so a
+  tool schema carrying `additionalProperties` — required by OpenAI strict mode —
+  failed with `Unknown name "additionalProperties"`.
+- **`stream_fallback = false` was honoured by one provider family.** OpenAI,
+  Claude and Gemini fell back to a non-streaming request unconditionally, and
+  the fallback's single callback counts as a chunk — so the bundled conformance
+  runner, whose purpose is detecting broken SSE, reported streaming healthy on
+  three providers where it was not.
+- **Two streaming returns still bypassed normalization.** Gemini's `stream_chat`
+  returned the raw accumulator on the *successful* path while its fallback
+  returned a normalized response, and Claude's `stream_chat` had the reverse.
+  One function, one path fixed, one not — in both.
+- **`capabilities().embeddings` claimed DeepSeek.** Its adapter was removed in
+  0.3.0 when DeepSeek turned out to serve no embeddings endpoint, and the
+  capability map was not the sibling that got updated, so the documented check
+  said yes and the constructor then raised.
+- **A forced `tool_choice` was re-sent on every tool round.** `"required"`, or a
+  named tool, compelled another call each round, so the exchange ran to
+  `max_tool_rounds` and never reached an answer. It applies to the turn the
+  caller made; follow-ups let the model choose, including choosing to stop.
+- **Streamed replies never reported usage.** The chunk carrying token counts
+  arrives with an empty `choices`, and the accumulator returned early on exactly
+  that, so `stream_options.include_usage` — which this library forwards — could
+  not produce any.
+- **Streamed Claude tool exchanges dropped signed thinking blocks.** The handler
+  recognized only `tool_use` blocks, so a streamed thinking-plus-tools reply
+  could not legally be continued: Anthropic requires the signed blocks echoed
+  ahead of the tool calls. Same rebuild-instead-of-echo the non-streaming path
+  was fixed for.
+- **Gemini tool results were sent as arrays.** `functionResponse.response` must
+  be a Struct, and a tool returning a list encoded as a JSON array. Only a map
+  now travels unwrapped.
+- **A Gemini reply with neither candidates nor a block reason returned the raw
+  body**, leaving `text` nil against a contract that says it is always a string.
+  It was the last un-normalized path in that formatter.
+- **`stream_complete` deltas carried neither `content` nor `text`** on Claude,
+  Gemini, and the OpenAI-compatible family. The 0.3.0 fix for this landed only
+  in the OpenAI provider, so the documented
+  `delta.content or delta.text` printed nothing on the other three.
+
+### Documentation
+
+- `finish_reason` is the provider's own value, not a normalized vocabulary. The
+  documented `== "length"` example only matched OpenAI-style services; Claude
+  reports `max_tokens` and Gemini `MAX_TOKENS`.
+- Reasoning on Claude, including why a temperature you set is dropped when a
+  thinking budget is in use — an API requirement, and the one place the library
+  discards a value you chose.
+
 ## [0.3.0] - 2026-08-19
 
 The largest correctness release so far. It began with defects found by a team
@@ -442,7 +535,8 @@ Initial public release. A unified Lua 5.1–5.4 client for cloud LLM APIs, local
 Ollama models, and any OpenAI-compatible endpoint, with chat, streaming, tool
 calling, embeddings, retries, and structured errors behind one normalized API.
 
-[Unreleased]: https://github.com/unabated-games/ug-lua-llm/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/unabated-games/ug-lua-llm/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/unabated-games/ug-lua-llm/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/unabated-games/ug-lua-llm/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/unabated-games/ug-lua-llm/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/unabated-games/ug-lua-llm/compare/v0.1.0...v0.1.1

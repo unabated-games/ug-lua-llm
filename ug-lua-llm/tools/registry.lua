@@ -387,12 +387,24 @@ function ToolRegistry.process_response(client, response, messages, callback, opt
     -- Re-offer the tools on the follow-up. Without them the model cannot ask
     -- for a second one however much it needs to, so a multi-step task stops
     -- after the first result and the model apologises instead of continuing.
+    -- A forced tool_choice belongs to the turn the caller made. Re-sending
+    -- "required", or a named tool, on every follow-up compels another call
+    -- each round, so the exchange runs to max_tool_rounds and never reaches an
+    -- answer. The follow-ups let the model choose -- including choosing to
+    -- stop.
+    local follow_up = options
+    if options.tool_choice ~= nil and options.tool_choice ~= "auto" then
+      follow_up = {}
+      for key, value in pairs(options) do follow_up[key] = value end
+      follow_up.tool_choice = "auto"
+    end
+
     local next_response, err, details
     if options.tools then
       next_response, err, details =
-        client:chat_with_tools(current_messages, options.tools, options)
+        client:chat_with_tools(current_messages, options.tools, follow_up)
     else
-      next_response, err, details = client:chat(current_messages, options)
+      next_response, err, details = client:chat(current_messages, follow_up)
     end
     if not next_response then
       -- Surface the failure rather than handing back a nil response.
@@ -556,8 +568,11 @@ function ToolRegistry._prepare_tool_response_messages(messages, tool_results, pr
           -- Correlated by the id the model sent, where it sent one.
           id = model_ids[result.id] and result.id or nil,
           name = result.name,
-          response = type(result.result) == "table" and result.result or
-            { result = result.result },
+          -- Gemini requires a Struct here. A table is not enough: a tool that
+          -- returns a list encodes as a JSON array, which is rejected, so only
+          -- a map travels unwrapped.
+          response = (type(result.result) == "table" and result.result[1] == nil)
+            and result.result or { result = result.result },
         },
       }
     end
@@ -584,13 +599,21 @@ function ToolRegistry._prepare_tool_response_messages(messages, tool_results, pr
       -- empty tables as arrays: every empty container in an echoed item was an
       -- array on the wire, since an object with no keys carries no meaning to
       -- send back.
+      -- Recursive, because the empty containers are not at the top level. A
+      -- message item nests them two deep -- content[1].annotations and
+      -- .logprobs -- and a one-level pass re-encoded those as objects, so any
+      -- turn where the model spoke before calling a tool failed the follow-up
+      -- with "expected an array of objects, but got an object instead".
       local function echoable(item)
+        if type(item) ~= "table" then return item end
         local copy = {}
         for key, value in pairs(item) do
-          if type(value) == "table" and next(value) == nil then
+          if type(value) ~= "table" then
+            copy[key] = value
+          elseif next(value) == nil then
             copy[key] = json.empty_array()
           else
-            copy[key] = value
+            copy[key] = echoable(value)
           end
         end
         return copy

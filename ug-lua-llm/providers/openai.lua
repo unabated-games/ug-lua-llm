@@ -49,6 +49,28 @@ local function responses_tools(tools)
   return result
 end
 
+-- OpenAI takes an object for a named tool, spelled differently on each of its
+-- two APIs, and rejects a bare name with "Missing required parameter:
+-- 'tool_choice.type'". The portable `{ name = ... }` form was translated for
+-- Claude and Gemini and passed through verbatim here, so the documented option
+-- was a 400 on the provider it was modelled on.
+local function tool_choice_for(choice, api)
+  if choice == nil then return nil end
+  if type(choice) == "string" then return choice end
+  if type(choice) ~= "table" then return nil end
+
+  local named = choice.name or
+    (type(choice["function"]) == "table" and choice["function"].name)
+  if named then
+    if api == "responses" then
+      return { type = "function", name = named }
+    end
+    return { type = "function", ["function"] = { name = named } }
+  end
+  -- Already provider-shaped, or a mode object the API understands.
+  return choice
+end
+
 local function normalize_responses_body(body)
   local content_parts, tool_calls = {}, {}
   for _, item in ipairs((body and body.output) or {}) do
@@ -120,7 +142,8 @@ function OpenAIProvider:_responses_payload(messages, options, tools)
   end
   if tools then
     payload.tools = responses_tools(tools)
-    if options.tool_choice then payload.tool_choice = options.tool_choice end
+    local choice = tool_choice_for(options.tool_choice, "responses")
+    if choice then payload.tool_choice = choice end
   end
   return Options.payload(payload, options)
 end
@@ -263,7 +286,8 @@ function OpenAIProvider:_build_chat_payload(messages, options)
     payload.response_format = options.response_format
   end
 
-  if options.tool_choice then payload.tool_choice = options.tool_choice end
+  local chat_choice = tool_choice_for(options.tool_choice, "chat")
+  if chat_choice then payload.tool_choice = chat_choice end
 
   return Options.payload(payload, options)
 end
@@ -308,7 +332,7 @@ function OpenAIProvider:chat_with_tools(messages, tools, options)
 
   local payload = self:_build_chat_payload(messages, options)
   payload.tools = Tool.to_provider_format(tools, "openai")
-  payload.tool_choice = options.tool_choice or "auto"
+  payload.tool_choice = tool_choice_for(options.tool_choice, "chat") or "auto"
 
   local response, err, details = self.http:post(url, payload)
   if err or not response then
@@ -440,6 +464,14 @@ function OpenAIProvider:stream_complete(prompt, callback, options)
 
   if not success then
     -- Fall back to non-streaming if real streaming fails
+    -- A caller who asked not to fall back wants the streaming failure, not a
+    -- whole reply that hides it. Only the compatible family honoured this, so
+    -- the bundled conformance runner -- whose whole job is detecting broken
+    -- SSE -- reported streaming OK on the other three: the fallback's single
+    -- callback counts as a chunk.
+    if options and options.stream_fallback == false then
+      return nil, self:transport_error(_err, nil, "Streaming request failed")
+    end
     local response, fallback_err, details = self:complete(prompt, options)
     if fallback_err or not response then
       return nil, fallback_err, details
@@ -506,18 +538,14 @@ function OpenAIProvider:stream_chat(messages, callback, options)
   end
   local url = self.config.base_url .. "/chat/completions"
 
-  local payload = {
-    model = options.model or self.config.model,
-    messages = messages,
-    -- Chat Completions replaced max_tokens with max_completion_tokens and
-    -- current models reject the old name. The non-streaming builder was fixed
-    -- in 0.3.0; these two send the same payload to the same endpoint and were
-    -- missed, so streaming was rejected and quietly fell back to a non-streaming
-    -- request that reported success.
-    max_completion_tokens = options.max_tokens or self.config.max_tokens,
-    temperature = options.temperature or self.config.temperature,
-    stream = true
-  }
+  local payload = self:_build_chat_payload(messages, options)
+    -- Same fields as the non-streaming builder. These were literal payloads
+    -- carrying neither reasoning_effort, response_format, nor request_options,
+    -- so the ladder reported compliance for a request that had contained
+    -- none of them, and request_options -- documented to reach the provider
+    -- untouched -- was discarded. Third time a fix landed on the non-streaming
+    -- builder and missed these two.
+  payload.stream = true
 
   local accumulator = ChatStream.new(
     options.model or self.config.model, "openai", false)
@@ -531,6 +559,14 @@ function OpenAIProvider:stream_chat(messages, callback, options)
 
   if not success then
     -- Fall back to non-streaming if real streaming fails
+    -- A caller who asked not to fall back wants the streaming failure, not a
+    -- whole reply that hides it. Only the compatible family honoured this, so
+    -- the bundled conformance runner -- whose whole job is detecting broken
+    -- SSE -- reported streaming OK on the other three: the fallback's single
+    -- callback counts as a chunk.
+    if options and options.stream_fallback == false then
+      return nil, self:transport_error(_err, nil, "Streaming request failed")
+    end
     local response, fallback_err, details = self:chat(messages, options)
     if fallback_err or not response then
       return nil, fallback_err, details
@@ -566,20 +602,16 @@ function OpenAIProvider:stream_chat_with_tools(messages, tools, callback, option
 
   local formatted_tools = Tool.to_provider_format(tools, "openai")
 
-  local payload = {
-    model = options.model or self.config.model,
-    messages = messages,
-    -- Chat Completions replaced max_tokens with max_completion_tokens and
-    -- current models reject the old name. The non-streaming builder was fixed
-    -- in 0.3.0; these two send the same payload to the same endpoint and were
-    -- missed, so streaming was rejected and quietly fell back to a non-streaming
-    -- request that reported success.
-    max_completion_tokens = options.max_tokens or self.config.max_tokens,
-    temperature = options.temperature or self.config.temperature,
-    tools = formatted_tools,
-    tool_choice = options.tool_choice or "auto",
-    stream = true
-  }
+  local payload = self:_build_chat_payload(messages, options)
+    -- Same fields as the non-streaming builder. These were literal payloads
+    -- carrying neither reasoning_effort, response_format, nor request_options,
+    -- so the ladder reported compliance for a request that had contained
+    -- none of them, and request_options -- documented to reach the provider
+    -- untouched -- was discarded. Third time a fix landed on the non-streaming
+    -- builder and missed these two.
+  payload.tools = formatted_tools
+  payload.tool_choice = tool_choice_for(options.tool_choice, "chat") or "auto"
+  payload.stream = true
 
   local accumulator = ChatStream.new(
     options.model or self.config.model, "openai", true)
@@ -593,6 +625,14 @@ function OpenAIProvider:stream_chat_with_tools(messages, tools, callback, option
 
   if not success then
     -- Fall back to non-streaming if real streaming fails
+    -- A caller who asked not to fall back wants the streaming failure, not a
+    -- whole reply that hides it. Only the compatible family honoured this, so
+    -- the bundled conformance runner -- whose whole job is detecting broken
+    -- SSE -- reported streaming OK on the other three: the fallback's single
+    -- callback counts as a chunk.
+    if options and options.stream_fallback == false then
+      return nil, self:transport_error(_err, nil, "Streaming request failed")
+    end
 
     local response, fallback_err, details = self:chat_with_tools(messages, tools, options)
     if fallback_err or not response then

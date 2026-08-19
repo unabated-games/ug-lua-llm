@@ -49,7 +49,17 @@ function ChatStream.new(model, provider, include_tools)
 end
 
 function ChatStream:consume(chunk, callback)
-  if type(chunk) ~= "table" or type(chunk.choices) ~= "table" then return end
+  if type(chunk) ~= "table" then return end
+
+  -- The chunk that carries usage arrives with an empty `choices`, so returning
+  -- early on the absence of choices threw it away and a streamed reply never
+  -- reported token counts -- even with stream_options.include_usage set, which
+  -- this library forwards.
+  if type(chunk.usage) == "table" then
+    self.current.usage = chunk.usage
+  end
+
+  if type(chunk.choices) ~= "table" then return end
   self.current.raw_events[#self.current.raw_events + 1] = chunk
   self.current.id = chunk.id or self.current.id
   self.current.model = chunk.model or self.current.model

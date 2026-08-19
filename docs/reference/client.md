@@ -42,6 +42,12 @@ if response.text == "" and response.finish_reason == "length" then
 end
 ```
 
+`finish_reason` is the provider's own value, not a normalized vocabulary — the
+untouched payload is a stated principle and this is part of it. Truncation is
+`"length"` on OpenAI-compatible services, `"max_tokens"` on Claude, and
+`"MAX_TOKENS"` on Gemini, so match against the ones you target rather than
+assuming the OpenAI spelling.
+
 `finish_reason` is a string or `nil`, and `tool_calls` is a table or `nil`;
 neither ever holds a null sentinel. The untouched provider payload stays in
 `raw`, where JSON `null` is preserved exactly as the backend decoded it. To
