@@ -23,18 +23,28 @@ function Bucket:refill()
   self.last_refill = now
 end
 
+-- How long until `count` tokens are available, without taking any. A request
+-- larger than the bucket can ever hold is unsatisfiable rather than slow, and
+-- is reported as such instead of returning a wait that never ends.
+function Bucket:peek(count)
+  count = count or 1
+  if count > self.capacity then
+    return false, nil, "request of " .. count ..
+      " exceeds the bucket capacity of " .. self.capacity
+  end
+  self:refill()
+  if self.tokens >= count then return true, 0 end
+  return false, (count - self.tokens) / self.refill_rate
+end
+
 function Bucket:acquire(count)
   count = count or 1
-  self:refill()
-
-  if self.tokens >= count then
+  local ok, wait_time, err = self:peek(count)
+  if err then return false, nil, err end
+  if ok then
     self.tokens = self.tokens - count
     return true, 0
   end
-
-  -- Calculate wait time needed
-  local deficit = count - self.tokens
-  local wait_time = deficit / self.refill_rate
   return false, wait_time
 end
 
@@ -79,23 +89,51 @@ function RateLimiter.wait(provider_name, token_count)
     return true
   end
 
-  limiter.request_bucket:wait_and_acquire(1)
+  local use_tokens = limiter.token_bucket and token_count
+  -- Measure both buckets before spending from either. Taking the request
+  -- token first and then waiting on the token bucket discarded the request
+  -- token that had already been spent.
+  while true do
+    local request_ok, request_wait, request_err = limiter.request_bucket:peek(1)
+    if request_err then return false, request_err end
 
-  if limiter.token_bucket and token_count then
-    limiter.token_bucket:wait_and_acquire(token_count)
+    local token_ok, token_wait = true, 0
+    if use_tokens then
+      local token_err
+      token_ok, token_wait, token_err = limiter.token_bucket:peek(token_count)
+      if token_err then return false, token_err end
+    end
+
+    if request_ok and token_ok then
+      limiter.request_bucket:acquire(1)
+      if use_tokens then limiter.token_bucket:acquire(token_count) end
+      return true
+    end
+
+    socket.sleep(math.max(request_wait or 0, token_wait or 0))
   end
-
-  return true
 end
 
--- Check if a request is allowed without blocking
-function RateLimiter.check(provider_name)
+-- Whether a request would be allowed right now, and how long until it would
+-- be. This only reports: it used to call acquire, so a caller that checked
+-- before acting spent its budget twice as fast as configured.
+function RateLimiter.check(provider_name, token_count)
   local limiter = limiters[provider_name]
   if not limiter then
     return true, 0
   end
 
-  return limiter.request_bucket:acquire(1)
+  local ok, wait_time, err = limiter.request_bucket:peek(1)
+  if err then return false, nil, err end
+  if limiter.token_bucket and token_count then
+    local token_ok, token_wait, token_err =
+      limiter.token_bucket:peek(token_count)
+    if token_err then return false, nil, token_err end
+    if not token_ok then
+      return false, math.max(wait_time or 0, token_wait or 0)
+    end
+  end
+  return ok, wait_time
 end
 
 -- Remove rate limits for a provider

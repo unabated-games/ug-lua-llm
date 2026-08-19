@@ -9,7 +9,7 @@ OpenAI-compatible Chat Completions endpoints.
     luarocks install ug-lua-llm
 
 To work against the source, or to try an unreleased change, clone the
-repository and run `luarocks make ug-lua-llm-0.2.0-1.rockspec` instead.
+repository and run `luarocks make ug-lua-llm-0.3.0-1.rockspec` instead.
 
     local llm = require "ug-lua-llm"
     local client = llm.new("openai", {

@@ -58,6 +58,32 @@ end
 `JSON.value(x)` returns `nil` for a null sentinel and the value otherwise, which
 makes ordinary `or` fallbacks safe against `raw`.
 
+## Tool loops
+
+`ToolRegistry.process_response` runs tool calls and continues the conversation
+until the model stops asking for tools. Pass the tools through so the model can
+request a second one after seeing the first result:
+
+```lua
+local Registry = require "ug-lua-llm.tools.registry"
+local tools = assert(Registry.collection({ "find_city", "get_weather" }))
+
+local first = assert(client:chat_with_tools(messages, tools))
+Registry.process_response(client, first, messages, function(final, err)
+  if not final then error(err) end
+  print(final.text)
+end, { tools = tools, max_tool_rounds = 8 })
+```
+
+Without `tools`, the follow-up cannot request anything further, so the exchange
+ends after one round. `max_tool_rounds` bounds a model that keeps asking for the
+same tool; when the cap is reached the response carries
+`tool_rounds_exhausted = true` rather than being passed off as complete.
+
+The bundled example tools are opt-in. Call
+`ToolRegistry.register_standard_tools()` if you want `get_weather` and
+`calculator`.
+
 ## Structured output
 
 Pass a JSON Schema as `json_schema` and read the decoded result from `parsed`:
@@ -101,7 +127,8 @@ end
 
 `reasoning` accepts `false`/`"none"`, `"low"`, `"medium"`, `"high"`, or `true`.
 See the [provider guide](../guides/providers.md) for what each provider can
-actually honour, `response.reasoning_applied` for whether it did, and
+actually honour, `response.reasoning_applied` for whether it did — a boolean
+when you asked for a level, `nil` when you did not — and
 `response.usage.reasoning_tokens` for what it cost.
 
 ## Streaming

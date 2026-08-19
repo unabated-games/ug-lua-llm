@@ -6,6 +6,92 @@ Notable changes to ug-lua-llm. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-19
+
+Defects found by a team porting the library to another runtime, who read every
+module closely and re-derived its behaviour. Most were visible in the source
+rather than in a failing test, which is why they survived: the behaviour was
+wrong but nothing asserted otherwise.
+
+**Two of these broke a documented feature outright.** Groq's default model no
+longer exists, so any client that did not set one failed on its first call, and
+OpenAI tool calling never produced a final answer.
+
+### Fixed
+
+- **Groq's default model had been retired.** A client created without an
+  explicit model failed with `The model llama-3.3-70b-versatile does not exist`.
+  The default is now `openai/gpt-oss-20b`. Defaults age out silently and only
+  fail for users who did not set one, which is the newest users.
+- **OpenAI tool calling never completed.** The follow-up request after a tool
+  ran was built in the Chat Completions shape and sent to the Responses API,
+  which is the default, and was rejected with `Unknown parameter:
+  input[N].tool_calls`. No final answer was ever produced, and the failure was
+  silent: the callback received `nil` with no error. Tool exchanges now use the
+  typed `function_call` and `function_call_output` items that API takes.
+- **Tool calling ran exactly one round.** A model that needed a second tool
+  after seeing the first result never got the chance, because the follow-up was
+  made without tools and the loop ended after one pass. It now runs to
+  completion, bounded by `max_tool_rounds` (default 8), re-offering the tools
+  when they are supplied via `options.tools`. A failed follow-up is reported
+  rather than returned as `nil`.
+- **The Chat Completions escape hatch was unusable on current models.** It sent
+  `max_tokens`, which they reject in favour of `max_completion_tokens`, and it
+  forced the library's default `temperature` onto every request, which several
+  models also reject. A temperature is now sent only when the caller chose one.
+- **Gemini token usage was never populated.** The provider emitted
+  `prompt_tokens` while the normalizer looked for `total_input_tokens`, so the
+  branch never fired. Both namings are now accepted.
+- **Gemini discarded all but the last system message.** A plain assignment
+  inside the message loop overwrote each previous one without warning. They are
+  now joined.
+- **A blocked Gemini prompt returned the raw body.** Gemini answers 200 with
+  `promptFeedback.blockReason` and no candidates; the caller saw an unfamiliar
+  shape rather than a clear refusal. It is normalized, with `blocked`,
+  `block_reason` and `finish_reason` set to `"content_filter"`.
+- **`RateLimiter.check` consumed a token.** A call that reads as a probe
+  decremented the bucket, so any caller checking before acting spent its budget
+  twice as fast as configured. `check` now only reports. Alongside that: both
+  buckets are measured before either is spent, so a wait no longer discards a
+  token already taken; and a request larger than the bucket capacity is
+  reported as unsatisfiable instead of waiting for a refill that can never
+  arrive.
+- **Embedding results were paired by arrival order.** The API documents that
+  they may arrive out of order, so a caller lining `embeddings[i]` up with
+  `inputs[i]` could silently get the wrong vector for the wrong text. They are
+  now sorted by the index the provider reports.
+- **Claude tool schemas lost fields.** `input_schema` was rebuilt from
+  `properties` and `required` alone, dropping `additionalProperties`, `$defs`,
+  descriptions and anything else the caller wrote. The schema is now carried
+  across intact, and an empty `required` is omitted rather than encoded as
+  `{}`, which is the wrong JSON type for a list.
+- **OpenRouter attribution used a header the gateway ignores.** It sent
+  `X-OpenRouter-Title`; the documented header is `X-Title`, so attribution
+  never took effect.
+- **`reasoning_applied` was never `true`.** It was set only when a request had
+  to fall back, so the documented check `if response.reasoning_applied then`
+  could not fire even when the provider honoured the request in full. It is now
+  a boolean whenever a level was asked for — `false` also covering a provider
+  with no reasoning control, which previously looked identical to compliance —
+  and stays `nil` when no level was asked for. The test covering it was named
+  for the correct behaviour but asserted the defect.
+- **A transport failure could be mistaken for a provider refusal.** The
+  `reasoning` and `json_schema` fallbacks matched on the error message even
+  when no HTTP status was present, so an unrelated failure could be retried
+  silently. A refusal now requires a 4xx.
+
+### Changed
+
+- **The bundled example tools are opt-in.** `get_weather` and `calculator` were
+  registered when the module loaded, so every consumer inherited tools they
+  never defined, in a registry shared across the process. Call
+  `ToolRegistry.register_standard_tools()` if you were relying on them.
+- **Diagnostics go through the logger.** The tool registry called `print`,
+  which writes to a stream the host may be using for its own output and cannot
+  be suppressed. It now uses `Logger.warn`, which a host can route or silence.
+- `Config.is_explicit(config, key)` reports whether a value was chosen by the
+  caller or filled in as a default.
+
 ## [0.2.0] - 2026-08-13
 
 Adds normalized control over two things that previously required knowing each
@@ -127,7 +213,8 @@ Initial public release. A unified Lua 5.1–5.4 client for cloud LLM APIs, local
 Ollama models, and any OpenAI-compatible endpoint, with chat, streaming, tool
 calling, embeddings, retries, and structured errors behind one normalized API.
 
-[Unreleased]: https://github.com/unabated-games/ug-lua-llm/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/unabated-games/ug-lua-llm/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/unabated-games/ug-lua-llm/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/unabated-games/ug-lua-llm/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/unabated-games/ug-lua-llm/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/unabated-games/ug-lua-llm/releases/tag/v0.1.0

@@ -25,7 +25,8 @@ function GeminiProvider.new(config)
   return provider
 end
 
--- Build the URL with API key query parameter
+-- Build the request URL. The API key travels as a header, not in the query
+-- string, so it stays out of logs and proxy access records.
 function GeminiProvider:_url(model, action)
   return string.format("%s/models/%s:%s", self.config.base_url, model, action)
 end
@@ -33,11 +34,16 @@ end
 -- Convert standard messages to Gemini format
 function GeminiProvider:_format_contents(messages)
   local contents = {}
-  local system_instruction = nil
+  -- Gemini takes a single system instruction, but a transcript may carry
+  -- several system messages. Assigning discarded every one but the last,
+  -- silently; join them the way the Claude provider joins its own.
+  local system_parts = {}
 
   for _, msg in ipairs(messages) do
     if msg.role == "system" then
-      system_instruction = { parts = { { text = msg.content } } }
+      if type(msg.content) == "string" and msg.content ~= "" then
+        system_parts[#system_parts + 1] = msg.content
+      end
     else
       local role = msg.role == "assistant" and "model" or "user"
       table.insert(contents, {
@@ -47,12 +53,34 @@ function GeminiProvider:_format_contents(messages)
     end
   end
 
+  local system_instruction = nil
+  if #system_parts > 0 then
+    system_instruction = {
+      parts = { { text = table.concat(system_parts, "\n\n") } },
+    }
+  end
+
   return contents, system_instruction
 end
 
 -- Convert Gemini response to OpenAI-like format for consistency
 function GeminiProvider:_format_response(body)
   if not body or not body.candidates or not body.candidates[1] then
+    -- A blocked prompt answers 200 with promptFeedback and no candidates.
+    -- Returning the raw body handed callers an unfamiliar shape with no text
+    -- and no finish_reason; normalize it so the refusal is legible.
+    local feedback = type(body) == "table" and body.promptFeedback
+    if type(feedback) == "table" and feedback.blockReason then
+      return {
+        content = "",
+        finish_reason = "content_filter",
+        blocked = true,
+        block_reason = feedback.blockReason,
+        safety_ratings = feedback.safetyRatings,
+        model = type(body) == "table" and body.modelVersion or nil,
+        raw = body,
+      }
+    end
     return body
   end
 

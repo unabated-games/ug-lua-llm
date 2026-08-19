@@ -87,9 +87,15 @@ function Response.normalize(provider, raw)
   elseif provider == "gemini" then
     result.text = text_value(raw.content)
     local usage = table_value(raw.usage)
-    if usage and value(usage.total_input_tokens) then
-      local prompt_tokens = value(usage.total_input_tokens)
-      local completion_tokens = value(usage.total_output_tokens)
+    -- The provider normalizes Gemini's usageMetadata to prompt/completion
+    -- names, while the Interactions API reports total_input/total_output.
+    -- Accepting only the latter meant Gemini usage was never populated.
+    local gemini_prompt = usage and
+      (value(usage.total_input_tokens) or value(usage.prompt_tokens))
+    if usage and gemini_prompt then
+      local prompt_tokens = gemini_prompt
+      local completion_tokens = value(usage.total_output_tokens) or
+        value(usage.completion_tokens)
       local total = value(usage.total_tokens)
       result.usage = {
         prompt_tokens = prompt_tokens,

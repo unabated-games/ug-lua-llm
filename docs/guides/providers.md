@@ -9,7 +9,7 @@ require an API key; Ollama and custom endpoints may run without one.
 | `claude` | Anthropic | `claude-sonnet-4-6` | `ANTHROPIC_API_KEY` |
 | `gemini` | Google | `gemini-3.6-flash` | `GEMINI_API_KEY` |
 | `grok` | xAI | `grok-4.3` | `GROK_API_KEY` |
-| `groq` | Groq | `llama-3.3-70b-versatile` | `GROQ_API_KEY` |
+| `groq` | Groq | `openai/gpt-oss-20b` | `GROQ_API_KEY` |
 | `openrouter` | OpenRouter | `~openai/gpt-latest` | `OPENROUTER_API_KEY` |
 | `ollama` | Local Ollama | `llama3.2` | none |
 | `deepseek` | DeepSeek | `deepseek-v4-flash` | `DEEPSEEK_API_KEY` |
@@ -47,10 +47,14 @@ that do not reason, and some Gemini models refuse a zero thinking budget — the
 request is retried without it, and the response reports what happened:
 
 ```lua
-if response.reasoning_applied == false then
+if not response.reasoning_applied then
   -- The reply is valid, but the model would not honour the request.
 end
 ```
+
+`reasoning_applied` is a boolean whenever you asked for a level, and `nil` when
+you did not. A provider with no control at all reports `false`: the request
+succeeded, but nothing was sent to shape it.
 
 `client:capabilities().reasoning_control` says what to expect before you ask:
 `"effort"`, `"budget"` (may refuse zero, so cannot always be disabled),

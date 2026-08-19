@@ -66,7 +66,7 @@ describe("OpenAI-compatible providers", function()
     "Groq",
     "ug-lua-llm.providers.groq",
     "https://api.groq.com/openai/v1",
-    "llama-3.3-70b-versatile"
+    "openai/gpt-oss-20b"
   )
 
   test_provider(
@@ -218,8 +218,10 @@ describe("OpenAI-compatible providers", function()
       local p = OpenRouterProvider.new({ api_key = "sk-test",
         http_referer = "https://example.com", x_title = "Example" })
       assert.are.equal("https://example.com", p.http.headers["HTTP-Referer"])
-      assert.are.equal("Example", p.http.headers["X-OpenRouter-Title"])
-      assert.is_nil(p.http.headers["X-Title"])
+      -- OpenRouter documents this as X-Title. The longer name was simply
+      -- ignored by the gateway, so attribution never actually took effect.
+      assert.are.equal("Example", p.http.headers["X-Title"])
+      assert.is_nil(p.http.headers["X-OpenRouter-Title"])
     end)
   end)
 end)

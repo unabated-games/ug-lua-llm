@@ -73,14 +73,23 @@ function Tool.to_claude_format(tools)
   local result = {}
 
   for _, tool in ipairs(tools) do
+    -- Carry the caller's schema across rather than rebuilding it from
+    -- properties and required alone, which silently dropped everything else
+    -- they wrote: additionalProperties, $defs, enum, descriptions, and so on.
+    local schema = {}
+    for key, value in pairs(tool.parameters or {}) do schema[key] = value end
+    schema.type = schema.type or "object"
+    schema.properties = schema.properties or {}
+    -- An empty Lua table encodes as {} rather than [], which is the wrong JSON
+    -- type for a list. Absent is both valid and unambiguous.
+    if type(schema.required) == "table" and #schema.required == 0 then
+      schema.required = nil
+    end
+
     table.insert(result, {
       name = tool.name,
       description = tool.description,
-      input_schema = {
-        type = "object",
-        properties = tool.parameters.properties or {},
-        required = tool.parameters.required or {}
-      }
+      input_schema = schema,
     })
   end
 
