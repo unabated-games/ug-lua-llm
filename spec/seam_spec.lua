@@ -754,6 +754,30 @@ end)
 describe("structured_applied cannot claim a schema that was never sent", function()
   local Structured = require("ug-lua-llm.core.structured")
 
+  it("covers every provider with a reasoning control too", function()
+    -- The sibling map. Both flags answer the same question about different
+    -- ladders, so a completeness test for one without the other is the same
+    -- omission that produced the defect.
+    local Reasoning = require("ug-lua-llm.core.reasoning")
+    for _, provider in ipairs({ "openai", "claude", "gemini", "grok", "groq",
+        "openrouter", "ollama", "deepseek", "mistral", "openai-compatible" }) do
+      assert.is_truthy(Reasoning.control(provider),
+        provider .. " has no reasoning control entry")
+    end
+  end)
+
+  it("asks each module rather than testing an index at the call site", function()
+    local Reasoning = require("ug-lua-llm.core.reasoning")
+    -- A provider with no carrier or control never complied, whatever rung ran.
+    assert.is_false(Structured.applied("nosuchprovider", 1))
+    assert.is_false(Reasoning.applied("nosuchprovider", 1))
+    assert.is_true(Structured.applied("openai", 1))
+    assert.is_true(Reasoning.applied("openai", 1))
+    -- And a later rung is a degradation on both.
+    assert.is_false(Structured.applied("openai", 2))
+    assert.is_false(Reasoning.applied("openai", 2))
+  end)
+
   it("covers every provider the library can construct", function()
     -- The flag was derived from the rung index alone, which reads correctly
     -- while every provider is in the format map. A provider missing from it has

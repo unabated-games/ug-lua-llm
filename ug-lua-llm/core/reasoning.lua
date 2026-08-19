@@ -143,6 +143,15 @@ function Reasoning.attempts(provider_name, level, options)
   return { unchanged }
 end
 
+--- Whether an attempt actually carried the control the caller asked for.
+--- Lives here rather than at the call site because it is a fact about how the
+--- ladder is built: a provider with no control has one attempt that sends
+--- nothing, so a bare index test reports a request that never mentioned
+--- reasoning as compliance.
+function Reasoning.applied(provider_name, index)
+  return Reasoning.control(provider_name) ~= false and index == 1
+end
+
 -- Signatures of a provider refusing the control itself, rather than failing
 -- for an unrelated reason. Matched conservatively: an unrelated 400 must not
 -- trigger a silent retry that hides it.

@@ -237,6 +237,13 @@ function Structured.attempts(provider_name, spec, options)
   return { unchanged }
 end
 
+--- Whether an attempt actually carried the schema, for the same reason as
+--- Reasoning.applied: a provider with no carrier has one attempt that sends no
+--- schema, and a bare index test calls that compliance.
+function Structured.applied(provider_name, index)
+  return Structured.format(provider_name) ~= false and index == 1
+end
+
 -- Signatures of a model refusing structured output rather than failing for an
 -- unrelated reason.
 local REFUSAL_PATTERNS = {

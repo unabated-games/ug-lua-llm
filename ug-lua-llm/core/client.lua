@@ -74,23 +74,16 @@ function Client:_with_reasoning(options, invoke)
 
       if result then
         -- Report compliance separately from success, so a caller can tell a
-        -- degraded request from one that did what was asked. Only meaningful
-        -- when the caller asked for a level, so it stays nil when they did
-        -- not; a provider with no control never applied one, however the
-        -- attempt went.
+        -- degraded request from one that did what was asked. Each module
+        -- answers for its own ladder: these were computed here, identically,
+        -- and one of them was fixed without the other, which is what two
+        -- expressions of the same fact reliably produce.
         if level then
-          result.reasoning_applied =
-            Reasoning.control(provider_name) ~= false and index == 1
+          result.reasoning_applied = Reasoning.applied(provider_name, index)
         end
         if spec then
-          -- Derived from whether a carrier resolved at all, not from the rung
-          -- index alone. A provider missing from the format map has exactly one
-          -- attempt -- the unchanged one -- so rung 1 is a request carrying no
-          -- schema, and reporting it as applied tells the caller their schema
-          -- was honoured by a request that never contained it. Same rule as
-          -- reasoning_applied above; it had only been applied to one of them.
           result.structured_applied =
-            Structured.format(provider_name) ~= false and schema_index == 1
+            Structured.applied(provider_name, schema_index)
           Structured.attach(result, provider_name)
         end
         return result, err, details

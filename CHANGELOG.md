@@ -169,8 +169,11 @@ for a provider that has no embeddings rather than returning a client that 404s.
   unchanged one — so the first rung is a request carrying no schema, and the
   caller was told their schema had been honoured by a request that never
   contained it. It is now derived from whether a carrier resolved at all, the
-  same rule `reasoning_applied` already used, and a test keeps the map's
-  completeness from being the only thing holding it off.
+  same rule `reasoning_applied` already used. Both flags are answered by their
+  own module — `Reasoning.applied` and `Structured.applied` — rather than
+  computed at the call site, because two expressions of one fact are how the
+  first came to be fixed without the second. Tests cover both maps for every
+  provider the library can construct.
 - **Structured output did nothing on the Chat Completions escape hatch, and
   said it had worked.** The schema was carried as `text.format`, which only the
   Responses API reads, and the Chat Completions payload builder did not carry
