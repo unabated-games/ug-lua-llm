@@ -47,6 +47,26 @@ print(response.text)
 luarocks install ug-lua-llm
 ```
 
+**On Lua 5.5 this currently stops** with `Could not satisfy dependency bit32`.
+The cause is upstream, in lua-http: its rockspec requires `bit32`, which has no
+5.5 release, although lua-http only uses it on Lua 5.1. cqueues, which lua-http
+needs, also has to be told where the 5.5 headers are. Until that is fixed
+upstream, install lua-http yourself first, then the rock:
+
+```sh
+luarocks install cqueues \
+  CFLAGS="$(luarocks config variables.CFLAGS) -I$(luarocks config variables.LUA_INCDIR)"
+for rock in compat53 luaossl basexx lpeg lpeg_patterns binaryheap fifo; do
+  luarocks install "$rock"
+done
+luarocks install http --deps-mode=none
+luarocks install ug-lua-llm
+```
+
+LuaRocks still warns that `bit32` is missing, which is harmless on 5.5. Lua 5.1
+to 5.4 need none of this. The
+[installation guide](docs/getting-started.md#lua-55) has the details.
+
 To work against the source, or to try an unreleased change, install from a
 checkout instead:
 
@@ -55,11 +75,6 @@ git clone https://github.com/unabated-games/ug-lua-llm.git
 cd ug-lua-llm
 luarocks make ug-lua-llm-0.4.1-1.rockspec
 ```
-
-> On Lua 5.5, including Homebrew's unversioned `lua` formula, lua-http has to be
-> installed before ug-lua-llm, because one of its dependencies has no 5.5
-> release. The [installation guide](docs/getting-started.md#lua-55) gives the
-> commands, and covers diagnostics.
 
 ## Choose a provider
 
