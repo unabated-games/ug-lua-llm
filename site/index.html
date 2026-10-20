@@ -509,6 +509,35 @@ end</pre>
                     <code>luarocks install ug-lua-llm</code>
                     <button type="button" data-copy>Copy</button>
                   </div>
+                  <div class="note">
+                    <p>
+                      <strong>On Lua 5.5 this currently stops</strong> with
+                      <code>Could not satisfy dependency bit32</code>. The
+                      cause is upstream, in lua-http: its rockspec requires
+                      <code>bit32</code>, which has no 5.5 release, although
+                      lua-http only uses it on Lua 5.1. cqueues, which
+                      lua-http needs, also has to be told where the 5.5
+                      headers are. Until that is fixed upstream, install
+                      lua-http yourself first, then the rock:
+                    </p>
+                    <div class="copy copy-multi">
+                      <code>luarocks install cqueues \
+  CFLAGS="$(luarocks config variables.CFLAGS) -I$(luarocks config variables.LUA_INCDIR)"
+for rock in compat53 luaossl basexx lpeg lpeg_patterns binaryheap fifo; do
+  luarocks install "$rock"
+done
+luarocks install http --deps-mode=none
+luarocks install ug-lua-llm</code>
+                      <button type="button" data-copy>Copy</button>
+                    </div>
+                    <p>
+                      LuaRocks still warns that <code>bit32</code> is missing,
+                      which is harmless on 5.5. Lua 5.1 to 5.4 need none of
+                      this. The
+                      <a href="docs/#/getting-started?id=lua-55">installation guide</a>
+                      has the details.
+                    </p>
+                  </div>
                 </div>
               </li>
               <li>
@@ -534,13 +563,6 @@ end</pre>
                 repository and run
                 <code>luarocks make ug-lua-llm-0.4.1-1.rockspec</code> to build
                 from a checkout instead of the released rock.
-              </p>
-              <p class="note">
-                <strong>On Lua 5.5, install lua-http first.</strong> One of
-                its dependencies has no 5.5 release yet, and that includes
-                Homebrew's unversioned <code>lua</code> formula. The
-                <a href="docs/#/getting-started?id=lua-55">installation guide</a>
-                gives the commands and covers diagnostics.
               </p>
               <p class="note">
                 <strong>From a checkout, the same diagnostics run as</strong>

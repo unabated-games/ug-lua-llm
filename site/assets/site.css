@@ -593,6 +593,50 @@ a:hover {
   color: var(--cream);
 }
 
+/* The Lua 5.5 workaround sits inside its install step, so the callout holds
+   prose and a multi-line copy block rather than being a single paragraph. */
+.steps .note {
+  margin: 14px 0 0;
+}
+
+.steps .note p {
+  margin: 0;
+  color: inherit;
+}
+
+.steps .note .copy {
+  margin: 12px 0;
+}
+
+.copy-multi {
+  align-items: flex-start;
+}
+
+.note .copy-multi code {
+  white-space: pre;
+  color: var(--cream);
+  background: none;
+  border-radius: 0;
+  padding: 0;
+  font-size: 0.79rem;
+  line-height: 1.6;
+  /* Several lines overflow, so unlike the one-liners this needs to show that
+     it scrolls. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+  padding-bottom: 6px;
+}
+
+.note .copy-multi code::-webkit-scrollbar {
+  display: block;
+  height: 6px;
+}
+
+.note .copy-multi code::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 3px;
+}
+
 /* ------------------------------------------------------------- next steps */
 
 .links {

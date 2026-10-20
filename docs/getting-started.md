@@ -34,7 +34,8 @@ installed there by LuaRocks alone:
   *'lua.h' file not found*.
 
 Install lua-http's dependencies, then lua-http without dependency resolution,
-then ug-lua-llm:
+then ug-lua-llm. If `luarocks install ug-lua-llm` has already failed with the
+`bit32` error, run these as they are; anything it installed is reused.
 
 ```sh
 luarocks install cqueues \
