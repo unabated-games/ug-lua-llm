@@ -1,11 +1,11 @@
 package = "ug-lua-llm"
-version = "0.4.0-1"
+version = "0.4.1-1"
 source = {
    -- The git+ prefix is required. With a plain https:// URL LuaRocks treats
    -- this as a file to download rather than a repository to clone, fetches
    -- something called "ug-lua-llm.git", and fails to unpack it.
    url = "git+https://github.com/unabated-games/ug-lua-llm.git",
-   tag = "v0.4.0"
+   tag = "v0.4.1"
 }
 description = {
    summary = "Unified Lua client for cloud LLM APIs, local Ollama models, and OpenAI-compatible endpoints",
@@ -23,19 +23,24 @@ description = {
       lifecycle hooks, reasoning and extended-thinking options, configurable
       logging, and endpoint conformance checks.
 
-      Supports Lua 5.1 through 5.4.
+      Supports Lua 5.1 through 5.5.
    ]],
    homepage = "https://unabated-games.github.io/ug-lua-llm/",
    license = "MIT"
 }
 dependencies = {
-   "lua >= 5.1, < 5.5",
+   -- Keep the upper bound in step with Doctor's supported range.
+   "lua >= 5.1, < 5.6",
    "luasocket >= 3.0rc1-2",
    "dkjson >= 2.6",
    -- lua-http decides when to negotiate "Expect: 100-continue", which the
    -- transport suppresses because several endpoints never answer it. Keep the
    -- floor explicit so that behaviour is pinned to a known implementation; see
    -- ug-lua-llm/utils/http.lua before raising it.
+   --
+   -- On Lua 5.5, http 0.4 cannot be resolved from here: its rockspec requires
+   -- bit32, which only Lua 5.1 uses and which has no 5.5 release. It has to be
+   -- installed first; docs/getting-started.md gives the commands.
    "http >= 0.4"
 }
 build = {

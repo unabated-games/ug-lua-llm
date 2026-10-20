@@ -1,6 +1,6 @@
 # ug-lua-llm
 
-> Unified Lua 5.1–5.4 client for cloud LLM APIs, Ollama, and arbitrary OpenAI-compatible endpoints.
+> Unified Lua 5.1–5.5 client for cloud LLM APIs, Ollama, and arbitrary OpenAI-compatible endpoints.
 
 Canonical documentation:
 

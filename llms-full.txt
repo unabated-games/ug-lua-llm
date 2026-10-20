@@ -1,6 +1,6 @@
 # ug-lua-llm agent reference
 
-ug-lua-llm is a dependency-light Lua 5.1–5.4 client for OpenAI, Claude, Gemini,
+ug-lua-llm is a dependency-light Lua 5.1–5.5 client for OpenAI, Claude, Gemini,
 Grok, Groq, OpenRouter, Ollama, DeepSeek, Mistral, and arbitrary
 OpenAI-compatible Chat Completions endpoints.
 

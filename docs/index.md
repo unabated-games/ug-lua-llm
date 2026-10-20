@@ -78,7 +78,7 @@ runner.
   with focused examples for chat, streaming, model selection, and tools.
 - **Compatibility is testable.** Run the conformance suite against a custom
   server's real models, chat, and SSE endpoints.
-- **Lua stays broad.** The package and CI support Lua 5.1 through 5.4.
+- **Lua stays broad.** The package and CI support Lua 5.1 through 5.5.
 
 ## Also here
 

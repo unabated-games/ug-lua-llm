@@ -10,6 +10,24 @@ describe("installation doctor", function()
     assert.is_nil(report.endpoint_error)
   end)
 
+  it("supports Lua 5.1 through 5.5", function()
+    for _, version in ipairs({ "5.1", "5.2", "5.3", "5.4", "5.5" }) do
+      assert.is_true(Doctor.lua_supported(version), version)
+    end
+    for _, version in ipairs({ "5.0", "5.6", "unknown" }) do
+      assert.is_false(Doctor.lua_supported(version), version)
+    end
+  end)
+
+  it("accepts the Lua it is running on", function()
+    local report = Doctor.run()
+    for _, check in ipairs(report.checks) do
+      if check.name == "lua-supported" then
+        assert.are.equal("pass", check.status, check.message)
+      end
+    end
+  end)
+
   it("prints statuses and remediation", function()
     local chunks = {}
     local output = { write = function(_, value) chunks[#chunks + 1] = value end }

@@ -6,6 +6,24 @@ Notable changes to ug-lua-llm. The format follows
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-20
+
+### Added
+
+- **Lua 5.5 support.** The rockspec capped Lua below 5.5, so `luarocks install
+  ug-lua-llm` refused to start on it. The library needed no code changes: the
+  full suite and the end-to-end transport tests pass on 5.5, and CI now runs
+  them there. lua-http still cannot be installed on 5.5 by LuaRocks alone,
+  because its rockspec requires `bit32`, which has no 5.5 release, and
+  cqueues' build cannot find 5.5 headers. The
+  [installation guide](docs/getting-started.md#lua-55) gives the steps.
+
+### Fixed
+
+- The doctor reported Lua 5.5 as unsupported. On 5.5 its fix for a missing
+  lua-http now points to the installation steps, because `luarocks install
+  http` cannot succeed there.
+
 ## [0.4.0] - 2026-08-19
 
 An audit of how the library talks to each inference API, run against the real
@@ -535,7 +553,8 @@ Initial public release. A unified Lua 5.1–5.4 client for cloud LLM APIs, local
 Ollama models, and any OpenAI-compatible endpoint, with chat, streaming, tool
 calling, embeddings, retries, and structured errors behind one normalized API.
 
-[Unreleased]: https://github.com/unabated-games/ug-lua-llm/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/unabated-games/ug-lua-llm/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/unabated-games/ug-lua-llm/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/unabated-games/ug-lua-llm/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/unabated-games/ug-lua-llm/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/unabated-games/ug-lua-llm/compare/v0.1.1...v0.2.0
