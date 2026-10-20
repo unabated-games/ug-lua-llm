@@ -6,7 +6,7 @@
     <title>ug-lua-llm — a simple Lua interface to LLM models</title>
     <meta
       name="description"
-      content="A unified Lua 5.1–5.4 client for cloud LLM APIs, local Ollama models, and any OpenAI-compatible endpoint. Chat, streaming, tools, embeddings, structured output, and reasoning control behind one normalized API."
+      content="A unified Lua 5.1–5.5 client for cloud LLM APIs, local Ollama models, and any OpenAI-compatible endpoint. Chat, streaming, tools, embeddings, structured output, and reasoning control behind one normalized API."
     />
     <meta name="theme-color" content="#071523" />
     <meta name="color-scheme" content="dark" />
@@ -19,7 +19,7 @@
     <meta property="og:title" content="ug-lua-llm — a simple Lua interface to LLM models" />
     <meta
       property="og:description"
-      content="Chat, streaming, tools, embeddings, structured output, and reasoning control across cloud providers, local Ollama, and any OpenAI-compatible endpoint. Lua 5.1–5.4, MIT licensed."
+      content="Chat, streaming, tools, embeddings, structured output, and reasoning control across cloud providers, local Ollama, and any OpenAI-compatible endpoint. Lua 5.1–5.5, MIT licensed."
     />
     <meta property="og:url" content="https://unabated-games.github.io/ug-lua-llm/" />
     <meta property="og:image" content="https://unabated-games.github.io/ug-lua-llm/assets/og-image.png" />
@@ -100,7 +100,7 @@
 
           <ul class="badges">
             <li>MIT licensed</li>
-            <li>Lua 5.1 – 5.4</li>
+            <li>Lua 5.1 – 5.5</li>
             <li>Cloud and local models</li>
             <li>No API key needed to start</li>
           </ul>
@@ -496,7 +496,7 @@ end</pre>
             <p class="eyebrow">install</p>
             <h2>Install</h2>
             <p>
-              Released on LuaRocks, and tested against Lua 5.1 through 5.4.
+              Released on LuaRocks, and tested against Lua 5.1 through 5.5.
             </p>
           </div>
 
@@ -532,15 +532,15 @@ end</pre>
               <p class="note">
                 <strong>Working against the source?</strong> Clone the
                 repository and run
-                <code>luarocks make ug-lua-llm-0.3.0-1.rockspec</code> to build
+                <code>luarocks make ug-lua-llm-0.4.1-1.rockspec</code> to build
                 from a checkout instead of the released rock.
               </p>
               <p class="note">
-                <strong>On Homebrew, use the versioned <code>lua@5.4</code>
-                formula.</strong> The unversioned formula targets Lua 5.5,
-                which the transport dependency chain does not support yet. The
-                <a href="docs/#/getting-started">installation guide</a> covers
-                exact setup and diagnostics.
+                <strong>On Lua 5.5, install lua-http first.</strong> One of
+                its dependencies has no 5.5 release yet, and that includes
+                Homebrew's unversioned <code>lua</code> formula. The
+                <a href="docs/#/getting-started?id=lua-55">installation guide</a>
+                gives the commands and covers diagnostics.
               </p>
               <p class="note">
                 <strong>From a checkout, the same diagnostics run as</strong>

@@ -1,7 +1,7 @@
 # ug-lua-llm
 
 [![CI](https://github.com/unabated-games/ug-lua-llm/actions/workflows/ci.yml/badge.svg)](https://github.com/unabated-games/ug-lua-llm/actions/workflows/ci.yml)
-[![Lua 5.1–5.4](https://img.shields.io/badge/Lua-5.1–5.4-2c2d72)](https://www.lua.org/)
+[![Lua 5.1–5.5](https://img.shields.io/badge/Lua-5.1–5.5-2c2d72)](https://www.lua.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-16a34a.svg)](LICENSE)
 
 A unified Lua client for cloud LLM APIs, local Ollama models, and arbitrary
@@ -39,7 +39,7 @@ print(response.text)
   endpoint conformance checks.
 - Client-side rate limiting with an injectable clock, so pacing can be tested
   without waiting.
-- Tested on Lua 5.1, 5.2, 5.3, and 5.4.
+- Tested on Lua 5.1, 5.2, 5.3, 5.4, and 5.5.
 
 ## Install
 
@@ -53,13 +53,13 @@ checkout instead:
 ```sh
 git clone https://github.com/unabated-games/ug-lua-llm.git
 cd ug-lua-llm
-luarocks make ug-lua-llm-0.4.0-1.rockspec
+luarocks make ug-lua-llm-0.4.1-1.rockspec
 ```
 
-> On Homebrew, use the versioned `lua@5.4` formula. The unversioned formula
-> targets Lua 5.5, which is not yet supported by ug-lua-llm's transport dependency
-> chain. See the [installation guide](docs/getting-started.md) for exact setup
-> and diagnostics.
+> On Lua 5.5, including Homebrew's unversioned `lua` formula, lua-http has to be
+> installed before ug-lua-llm, because one of its dependencies has no 5.5
+> release. The [installation guide](docs/getting-started.md#lua-55) gives the
+> commands, and covers diagnostics.
 
 ## Choose a provider
 

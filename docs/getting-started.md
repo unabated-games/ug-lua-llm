@@ -2,8 +2,9 @@
 
 ## Requirements
 
-ug-lua-llm supports Lua 5.1 through 5.4. It uses LuaSocket, lua-http, and dkjson;
-lua-cjson is an optional faster JSON backend.
+ug-lua-llm supports Lua 5.1 through 5.5. It uses LuaSocket, lua-http, and dkjson;
+lua-cjson is an optional faster JSON backend. On Lua 5.5, install lua-http
+first using the [Lua 5.5 steps](#lua-55) below.
 
 Install it from LuaRocks:
 
@@ -17,11 +18,37 @@ checkout instead:
 ```sh
 git clone https://github.com/unabated-games/ug-lua-llm.git
 cd ug-lua-llm
-luarocks make ug-lua-llm-0.4.0-1.rockspec
+luarocks make ug-lua-llm-0.4.1-1.rockspec
 ```
 
-On macOS, Homebrew's unversioned Lua currently targets a newer Lua release than
-ug-lua-llm supports. Install and select Lua 5.4 explicitly:
+### Lua 5.5
+
+ug-lua-llm runs on Lua 5.5, but two of lua-http's dependencies cannot yet be
+installed there by LuaRocks alone:
+
+- lua-http's rockspec requires `bit32`. Only Lua 5.1 uses it, and it has no
+  Lua 5.5 release, so `luarocks install http` stops with *Could not satisfy
+  dependency bit32*. lua-http itself works on 5.5 without it.
+- cqueues cannot read Lua 5.5's version number from `lua.h`, so unless the
+  headers are on the compiler's default search path its build fails with
+  *'lua.h' file not found*.
+
+Install lua-http's dependencies, then lua-http without dependency resolution,
+then ug-lua-llm:
+
+```sh
+luarocks install cqueues \
+  CFLAGS="$(luarocks config variables.CFLAGS) -I$(luarocks config variables.LUA_INCDIR)"
+for rock in compat53 luaossl basexx lpeg lpeg_patterns binaryheap fifo; do
+  luarocks install "$rock"
+done
+luarocks install http --deps-mode=none
+luarocks install ug-lua-llm
+```
+
+Homebrew's unversioned `lua` formula is Lua 5.5, and these steps work with it.
+If LuaRocks targets another Lua by default, add `--lua-version 5.5` to each
+`luarocks` command. To use Lua 5.4 instead, which needs none of this:
 
 ```sh
 brew install lua@5.4 luarocks

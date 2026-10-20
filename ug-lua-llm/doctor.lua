@@ -16,16 +16,33 @@ local function add(report, name, status, message, fix)
   if status == "fail" then report.ok = false end
 end
 
-local function module_check(report, name, required, rock)
+local function module_check(report, name, required, rock, fix)
   local ok = pcall(require, name)
   add(report, "module:" .. name, ok and "pass" or (required and "fail" or "info"),
     ok and "available" or "not found",
-    not ok and required and ("luarocks install " .. (rock or name)) or nil)
+    not ok and required and (fix or ("luarocks install " .. (rock or name))) or nil)
   return ok
 end
 
 local function lua_version()
   return (_VERSION or "Lua unknown"):match("(%d+%.%d+)") or "unknown"
+end
+
+-- Keep in step with the rockspec's `lua` dependency.
+local MIN_LUA, MAX_LUA = 5.1, 5.5
+
+function Doctor.lua_supported(version)
+  local numeric = tonumber(version)
+  return numeric ~= nil and numeric >= MIN_LUA and numeric <= MAX_LUA
+end
+
+-- `luarocks install http` cannot succeed on Lua 5.5 (see the rockspec), so
+-- the generic fix would send people round in a loop.
+local function http_fix(version)
+  if version == "5.5" then
+    return "lua-http needs manual steps on Lua 5.5; see " ..
+      "docs/getting-started.md#lua-55"
+  end
 end
 
 function Doctor.run(options)
@@ -45,11 +62,10 @@ function Doctor.run(options)
   local executable = capture("command -v lua")
   report.lua_executable = executable or "unknown"
   add(report, "lua", "pass", (_VERSION or "Lua") .. " at " .. report.lua_executable)
-  local numeric_version = tonumber(version)
-  if not numeric_version or numeric_version < 5.1 or numeric_version >= 5.5 then
+  if not Doctor.lua_supported(version) then
     add(report, "lua-supported", "fail",
-      "ug-lua-llm currently supports Lua 5.1 through 5.4",
-      "On Homebrew: brew install lua@5.4")
+      "ug-lua-llm currently supports Lua 5.1 through 5.5",
+      "Install Lua 5.1 through 5.5")
   else
     add(report, "lua-supported", "pass", "supported Lua version")
   end
@@ -90,7 +106,8 @@ function Doctor.run(options)
   end
 
   local socket_ok = module_check(report, "socket", true, "luasocket")
-  local http_ok = module_check(report, "http.request", true, "http")
+  local http_ok = module_check(report, "http.request", true, "http",
+    http_fix(version))
   local dkjson_ok = module_check(report, "dkjson", false, "dkjson")
   local cjson_ok = module_check(report, "cjson", false, "lua-cjson")
   if not dkjson_ok and not cjson_ok then

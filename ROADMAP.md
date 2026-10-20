@@ -49,7 +49,9 @@ defects that module-level tests could not:
 
 ## Later
 
-- Evaluate Lua 5.5 once the transport dependency chain supports it cleanly.
+- Drop the manual Lua 5.5 install steps once lua-http no longer requires
+  `bit32` there (daurnimator/lua-http#245) and cqueues can find Lua 5.5
+  headers on its own.
 - Move toward `1.0.0` only after the public contracts have settled. The
   normalized response, the `result, err, details` convention and the two
   degrading controls are the contracts that need to hold still first.

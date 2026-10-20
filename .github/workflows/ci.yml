@@ -20,6 +20,7 @@ jobs:
           - "5.2"
           - "5.3"
           - "5.4"
+          - "5.5"
           # LuaJIT skipped: LuaRocks manifest exceeds 65536 constants limit
           # - "luajit-2.1"
     steps:
@@ -30,6 +31,19 @@ jobs:
           luaVersion: ${{ matrix.lua-version }}
 
       - uses: leafo/gh-actions-luarocks@v6
+
+      # LuaRocks cannot install lua-http on Lua 5.5 unaided. These are the
+      # steps docs/getting-started.md#lua-55 gives users, run verbatim so the
+      # documented route stays tested.
+      - name: Install lua-http on Lua 5.5
+        if: matrix.lua-version == '5.5'
+        run: |
+          luarocks install cqueues \
+            CFLAGS="$(luarocks config variables.CFLAGS) -I$(luarocks config variables.LUA_INCDIR)"
+          for rock in compat53 luaossl basexx lpeg lpeg_patterns binaryheap fifo; do
+            luarocks install "$rock"
+          done
+          luarocks install http --deps-mode=none
 
       - name: Install dependencies
         run: |
